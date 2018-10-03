@@ -1,0 +1,84 @@
+{
+    "name": "S11 Exploration",
+    "routes": {
+        "image": {
+            "get": {
+                "topic": "/camera/image_raw",
+                "topic_type": "sensor_msgs/Image",
+                "fields": {
+                    "data": {
+                        "name": "image",
+                        "type": "image"
+                    }
+                }
+            }
+        },
+        "pose": {
+            "get": {
+                "topic": "/amcl_pose",
+                "topic_type": "geometry_msgs/PoseWithCovarianceStamped",
+                "fields": {
+                    "pose.pose.position.x": {
+                        "name": "x"
+                    },
+                    "pose.pose.position.y": {
+                        "name": "y"
+                    },
+                    "pose.pose.position.z": {
+                        "name": "z"
+                    }
+                }
+            }
+        },
+        "laser": {
+            "get": {
+                "topic": "/scan",
+                "topic_type": "sensor_msgs/LaserScan",
+                "fields": {
+                    "ranges": {
+                        "name": "range"
+                    },
+                    "range_min": {
+                        "name": "rage"
+                    }                    
+                }
+            }
+        },
+        "map": {
+            "get": {
+                "topic": "/benchbot_workspace/costmap/costmap",
+                "topic_type": "nav_msgs/OccupancyGrid"
+            }
+        },
+        "forward": {
+            "post": {
+                "callback": "base/forward"
+            }
+        },
+        "left": {
+            "post": {
+                "callback": "base/left"
+            }
+        },
+        "right": {
+            "post": {
+                "callback": "base/right"
+            }
+        },
+        "is_done": {
+            "get": {
+                "callback": "base/is_done"
+            }
+        }
+    },
+    "objectives": {
+        "start": {
+            "type": "objectives_simple/at_position",
+            "position": {"x": 2, "y": 4},
+            "tolerance": {
+                "linear": 0.3
+            }
+        }
+
+    }
+}
