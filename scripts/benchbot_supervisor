@@ -6,31 +6,31 @@ import rospy
 import cv2
 import base64
 import json
-import yaml
-import time
-import math
 import signal
-import types
-import importlib 
+import importlib
 import sys
 import gevent
 from gevent.pywsgi import WSGIServer
 from gevent.event import Event
 from threading import Lock
 
+from navigator.srv import NavigationGoto
 from cv_bridge import CvBridge, CvBridgeError
 
-class UnknownRouteError(Exception):
+class SupervisorException(Exception):
+    pass
+
+class UnknownRouteError(SupervisorException):
     def __init__(self, route):
-        Exception.__init__(self)
+        SupervisorException.__init__(self)
         self.route = route
 
     def __str__(self):
         return 'Unknown route: ' + self.route
 
-class UnknownCallbackError(Exception):
+class UnknownCallbackError(SupervisorException):
     def __init__(self, route, method):
-        Exception.__init__(self)
+        SupervisorException.__init__(self)
         self.route = route
         self.method = method
 
@@ -39,12 +39,21 @@ class UnknownCallbackError(Exception):
 
 class Supervisor(object):
     def __init__(self, task_file=None):
+        """
+        Constructor.
+
+        @param task_file: the task file from which to load the spec.
+          If no task file is provided, Supervisor.load(task_file) must be called instead.
+        @type  task_file: str
+        @raise SupervisorException: if task file is malformed
+        """
         rospy.init_node('benchbot_supervisor')
-    
+
         self.subscribers = []
         self.callbacks = {
-            'get': {}, 
-            'post': {}
+            'get': {},
+            'post': {},
+            'objectives': {}
         }
 
         self.spec = {}
@@ -53,8 +62,8 @@ class Supervisor(object):
         self.bridge = CvBridge()
         self.lock = Lock()
 
-        self.progress = []
-        
+        self.progress = {}
+
         if task_file:
             self.load(task_file)
 
@@ -64,11 +73,11 @@ class Supervisor(object):
 
         for route_id in self.spec['routes']:
             if 'get' in self.spec['routes'][route_id]:
-                
+
                 if 'topic' in self.spec['routes'][route_id]['get']:
                     if not 'topic_type' in self.spec['routes'][route_id]['get']:
                         raise Exception('Missing topic type for route: ' + route_id)
-                    
+
                     self.register_subscriber(route_id, self.spec['routes'][route_id]['get']['topic'], self.spec['routes'][route_id]['get']['topic_type'])
 
                 elif 'callback' in self.spec['routes'][route_id]['get']:
@@ -85,7 +94,9 @@ class Supervisor(object):
                     raise Exception('Required topic or callback missing for post method of route: ' + route_id)
 
         for objective_id in self.spec['objectives']:
-            pass
+            if 'callback' in self.spec['objectives'][objective_id]:
+                self.register_callback(objective_id, self.spec['objectives'][objective_id]['callback'], 'objectives')
+
 
     def register_subscriber(self, route_id, topic_name, topic_type_name):
         module, typename = topic_type_name.split('/')
@@ -98,46 +109,88 @@ class Supervisor(object):
         self.callbacks[method][route] = func
 
     def handle_initialise(self):
-        self.progress = []
+        goto_service = rospy.ServiceProxy('/navigation/goto', NavigationGoto)
+        print('Moved to:', goto_service('home').result)
+        self.progress = {}
+
+    def can_complete(self, objective_id):
+        result = {}
+
+        if not objective_id in self.spec['objectives']:
+            return False
+
+        if not 'depends' in self.spec['objective'][objective_id]:
+            return True
+
+        statement = self.spec['objective'][objective_id]['depends']
+
+        statement = statement.replace('(', '( ').replace(')', ' )').replace('!', '! ')
+
+        tokens = statement.split()
+        opts = {}
+
+        for token in tokens:
+            if token == '(' or token == ')' or token == '&&' or token == '||' or token == '!':
+                continue
+            opts[token] = token in self.progress
+
+        exec('e=' + statement.replace('&&', 'and').replace('||', 'or').replace('!', 'not'), opts, result)
+        print(result['e'])
+
+        return result['e']
 
     def handle_complete(self, data):
-        self.progress.append(data)
+        if 'id' not in data:
+            return {'result': 1, 'error': 'No objective identifier with the supplied'}
+
+        objective_id = data['id']
+        
+        if objective_id not in self.callbacks['objectives']:
+            return {'result': 1, 'error': 'No objective exists for the provided identifier: ' + ident}
+
+        if objective_id in self.progress:
+            return {'result': 1, 'error': 'A result has already been been registered for objective: ' + ident}
+
+        fn = self.callbacks['objectives'][objective_id]
+
+        self.progress[objective_id] = fn(self.spec, **data)
+        return {'result': 0}
 
     def handle_get(self, route):
         if not route in self.spec['routes'] or not 'get' in self.spec['routes'][route]:
             raise UnknownRouteError(route)
-        
+
         if route in self.callbacks['get']:
             return self.callbacks['get'][route]()
 
         if not 'fields' in self.spec['routes'][route]['get']:
             with self.lock:
                 return self.__toJSON(self.data[route]) if route in self.data else {}
-        
+
         retval = {}
         for key in self.spec['routes'][route]['get']['fields']:
             field_type = self.spec['routes'][route]['get']['fields'][key]['type'] if 'type' in self.spec['routes'][route]['get']['fields'][key] else None
             field_name = self.spec['routes'][route]['get']['fields'][key]['name'] if 'name' in self.spec['routes'][route]['get']['fields'][key] else key
 
             if field_type == 'image':
-                
+
                 with self.lock:
                     img = self.bridge.imgmsg_to_cv2(self.data[route], "bgr8")
-        
+
                 _, buf = cv2.imencode('.png', img)
                 retval[field_name] = base64.b64encode(buf)
             else:
                 steps = key.split('.')
-                
+
                 with self.lock:
                     retval[field_name] = getattr(self.data[route], steps.pop(0))
-                
+
                 for step in steps:
                     retval[field_name] = getattr(retval[field_name], step)
 
                 if hasattr(retval[field_name], '__slots__'):
                     retval[field_name] = Supervisor.__toJSON(retval[field_name])
-        
+
         return retval
 
     def handle_post(self, route, data):
@@ -149,36 +202,11 @@ class Supervisor(object):
 
         return self.callbacks['post'][route](**data)
 
-    def run(self, address='0.0.0.0', port=8081):
-        app = Flask(__name__)
-        @app.route('/')
-        # pylint: disable=unused-variable
-        def main():
-            return jsonify({
-                'get': [self.spec['routes'][route]['name'] if 'name' in self.spec['routes'][route] else route for route in self.spec['routes'] if 'get' in self.spec['routes'][route]], 
-                'send': [self.spec['routes'][route]['name'] if 'name' in self.spec['routes'][route] else route for route in self.spec['routes'] if 'post' in self.spec['routes'][route]]
-            })
+    def run(self, supervisor_address='172.17.0.1', supervisor_port=8081, client_address='127.0.0.1', client_port=8082):
+        app1 = Flask(__name__) # Interface to benchbot
+        app2 = Flask(__name__) # Interface to web UI
 
-        @app.route('/objectives')
-        # pylint: disable=unused-variable
-        def objectives():
-            return jsonify(self.spec['objectives'])
-
-        @app.route('/init', methods=['POST'])
-        # pylint: disable=unused-variable
-        def initialise():
-            self.handle_initialise()
-
-        @app.route('/complete', methods=['POST'])
-        # pylint: disable=unused-variable
-        def complete():
-            try:
-                return jsonify(self.handle_complete(request.get_json(silent=True)))
-            except Exception as e:
-                print(str(e))
-                abort(500)
-
-        @app.route('/<route>', methods=['GET'])
+        @app1.route('/<route>', methods=['GET'])
         # pylint: disable=unused-variable
         def get(route):
             try:
@@ -187,8 +215,10 @@ class Supervisor(object):
                 abort(404)
             except UnknownCallbackError:
                 abort(500)
+            except Exception as e:
+                print('Error <get>:', str(e))
 
-        @app.route('/<route>', methods=['POST'])
+        @app1.route('/<route>', methods=['POST'])
         # pylint: disable=unused-variable
         def post(route):
             try:
@@ -200,8 +230,64 @@ class Supervisor(object):
             except Exception as e:
                 print(str(e))
 
-        http_server = WSGIServer((address, port), app)
-        http_server.start()
+        @app1.route('/locations')
+        def locations():
+            try:
+                return jsonify(self.spec['locations'])
+            except Exception as e:
+                pass
+
+        @app1.route('/locations/<location>', methods=['GET'])
+        # pylint: disable=unused-variable
+        def location(location):
+            try:
+                return jsonify(self.spec['locations'][location])
+            except Exception as e:
+                print('Error <location>:', str(e))
+
+
+        @app1.route('/complete', methods=['POST'])
+        # pylint: disable=unused-variable
+        def complete():
+            try:
+                return jsonify(self.handle_complete(request.get_json(silent=True)))
+            except Exception as e:
+                print('Error <complete>:', str(e))
+
+        @app1.route('/objectives', methods=['GET'])
+        # pylint: disable=unused-variable
+        def objectives():
+            return jsonify([objective_id for objective_id in self.spec['objectives'] if self.can_complete(objective_id)])
+            
+        @app2.route('/')
+        # pylint: disable=unused-variable
+        def main():
+            return jsonify({
+                'get': [self.spec['routes'][route]['name'] if 'name' in self.spec['routes'][route] else route for route in self.spec['routes'] if 'get' in self.spec['routes'][route]], 
+                'send': [self.spec['routes'][route]['name'] if 'name' in self.spec['routes'][route] else route for route in self.spec['routes'] if 'post' in self.spec['routes'][route]]
+            })
+
+        @app2.route('/objectives')
+        # pylint: disable=unused-variable
+        def objectives():
+            return jsonify(self.spec['objectives'])
+
+        @app2.route('/init', methods=['POST'])
+        # pylint: disable=unused-variable
+        def initialise():
+            self.handle_initialise()
+            return jsonify()
+
+        @app2.route('/result', methods=['GET'])
+        # pylint: disable=unused-variable
+        def result():
+            return jsonify(self.progress)
+
+        benchbot_server = WSGIServer((supervisor_address, supervisor_port), app1)
+        benchbot_server.start()
+
+        ui_server = WSGIServer((client_address, client_port), app2)
+        ui_server.start()
 
         evt = Event()
 
@@ -209,11 +295,13 @@ class Supervisor(object):
         gevent.signal(signal.SIGTERM, evt.set)
         gevent.signal(signal.SIGINT, evt.set)
 
-        print('Server started on', address + ':' + str(port))
+        print('Benchbot Supervisor started on', supervisor_address + ':' + str(supervisor_port))
+        print('Client Server started on', client_address + ':' + str(client_port))
         evt.wait()
         print("Shutting down server")
 
-        http_server.stop()
+        benchbot_server.stop()
+        ui_server.stop()
 
     def __updater(self, route_id):
         def _updater(data):
