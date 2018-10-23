@@ -119,10 +119,10 @@ class Supervisor(object):
         if not objective_id in self.spec['objectives']:
             return False
 
-        if not 'depends' in self.spec['objective'][objective_id]:
+        if not 'depends' in self.spec['objectives'][objective_id]:
             return True
 
-        statement = self.spec['objective'][objective_id]['depends']
+        statement = self.spec['objectives'][objective_id]['depends']
 
         statement = statement.replace('(', '( ').replace(')', ' )').replace('!', '! ')
 
@@ -146,10 +146,10 @@ class Supervisor(object):
         objective_id = data['id']
         
         if objective_id not in self.callbacks['objectives']:
-            return {'result': 1, 'error': 'No objective exists for the provided identifier: ' + ident}
+            return {'result': 1, 'error': 'No objective exists for the provided identifier: ' + objective_id}
 
         if objective_id in self.progress:
-            return {'result': 1, 'error': 'A result has already been been registered for objective: ' + ident}
+            return {'result': 1, 'error': 'A result has already been been registered for objective: ' + objective_id}
 
         fn = self.callbacks['objectives'][objective_id]
 
@@ -256,9 +256,12 @@ class Supervisor(object):
 
         @app1.route('/objectives', methods=['GET'])
         # pylint: disable=unused-variable
-        def objectives():
-            return jsonify([objective_id for objective_id in self.spec['objectives'] if self.can_complete(objective_id)])
-            
+        def objectives_available():
+            try:
+                return jsonify([objective_id for objective_id in self.spec['objectives'] if self.can_complete(objective_id)])
+            except Exception as e:
+                print(e)
+
         @app2.route('/')
         # pylint: disable=unused-variable
         def main():
