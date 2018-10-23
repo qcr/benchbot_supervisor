@@ -94,7 +94,7 @@
         "goal_2": {
             "callback": "simple/at_location",
             "location": "kitchen",
-            "depends": "(goal_1a && goal_1b) || !goal_2 "
+            "depends": "(goal_1a && goal_1b) || !goal_2a "
         },
         "goal_2-a": {
             "callback": "simple/detected_objects_at_marker",

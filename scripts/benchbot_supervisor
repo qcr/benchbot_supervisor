@@ -37,6 +37,11 @@ class UnknownCallbackError(SupervisorException):
     def __str__(self):
         return 'Unknown callback: ' + self.route + ' <' + self.method + '>'
 
+class Context:
+    def __init__(self, config):
+        self.config = copy.deepcopy(config)
+        self.progress = {}
+    
 class Supervisor(object):
     def __init__(self, task_file=None):
         """
@@ -56,46 +61,46 @@ class Supervisor(object):
             'objectives': {}
         }
 
-        self.spec = {}
+        self.config = {}
         self.data = {}
 
         self.bridge = CvBridge()
         self.lock = Lock()
 
-        self.progress = {}
-
         if task_file:
             self.load(task_file)
 
+        self.context = Context(self.config)
+
     def load(self, filename):
         with open(filename) as f:
-            self.spec = json.loads(f.read())
+            self.config = json.loads(f.read())
 
-        for route_id in self.spec['routes']:
-            if 'get' in self.spec['routes'][route_id]:
+        for route_id in self.config['routes']:
+            if 'get' in self.config['routes'][route_id]:
 
-                if 'topic' in self.spec['routes'][route_id]['get']:
-                    if not 'topic_type' in self.spec['routes'][route_id]['get']:
+                if 'topic' in self.config['routes'][route_id]['get']:
+                    if not 'topic_type' in self.config['routes'][route_id]['get']:
                         raise Exception('Missing topic type for route: ' + route_id)
 
-                    self.register_subscriber(route_id, self.spec['routes'][route_id]['get']['topic'], self.spec['routes'][route_id]['get']['topic_type'])
+                    self.register_subscriber(route_id, self.config['routes'][route_id]['get']['topic'], self.config['routes'][route_id]['get']['topic_type'])
 
-                elif 'callback' in self.spec['routes'][route_id]['get']:
-                    self.register_callback(route_id, self.spec['routes'][route_id]['get']['callback'], 'get')
+                elif 'callback' in self.config['routes'][route_id]['get']:
+                    self.register_callback(route_id, self.config['routes'][route_id]['get']['callback'], 'get')
 
                 else:
                     raise Exception('Required topic or callback missing for get method of route: ' + route_id)
 
-            if 'post' in self.spec['routes'][route_id]:
-                if 'callback' in self.spec['routes'][route_id]['post']:
-                    self.register_callback(route_id, self.spec['routes'][route_id]['post']['callback'], 'post')
+            if 'post' in self.config['routes'][route_id]:
+                if 'callback' in self.config['routes'][route_id]['post']:
+                    self.register_callback(route_id, self.config['routes'][route_id]['post']['callback'], 'post')
 
                 else:
                     raise Exception('Required topic or callback missing for post method of route: ' + route_id)
 
-        for objective_id in self.spec['objectives']:
-            if 'callback' in self.spec['objectives'][objective_id]:
-                self.register_callback(objective_id, self.spec['objectives'][objective_id]['callback'], 'objectives')
+        for objective_id in self.config['objectives']:
+            if 'callback' in self.config['objectives'][objective_id]:
+                self.register_callback(objective_id, self.config['objectives'][objective_id]['callback'], 'objectives')
 
 
     def register_subscriber(self, route_id, topic_name, topic_type_name):
@@ -111,18 +116,18 @@ class Supervisor(object):
     def handle_initialise(self):
         goto_service = rospy.ServiceProxy('/navigation/goto', NavigationGoto)
         print('Moved to:', goto_service('home').result)
-        self.progress = {}
+        self.context = Context(self.config)
 
     def can_complete(self, objective_id):
         result = {}
 
-        if not objective_id in self.spec['objectives']:
+        if not objective_id in self.config['objectives']:
             return False
 
-        if not 'depends' in self.spec['objectives'][objective_id]:
+        if not 'depends' in self.config['objectives'][objective_id]:
             return True
 
-        statement = self.spec['objectives'][objective_id]['depends']
+        statement = self.config['objectives'][objective_id]['depends']
 
         statement = statement.replace('(', '( ').replace(')', ' )').replace('!', '! ')
 
@@ -132,11 +137,9 @@ class Supervisor(object):
         for token in tokens:
             if token == '(' or token == ')' or token == '&&' or token == '||' or token == '!':
                 continue
-            opts[token] = token in self.progress
+            opts[token] = token in self.context.progress
 
         exec('e=' + statement.replace('&&', 'and').replace('||', 'or').replace('!', 'not'), opts, result)
-        print(result['e'])
-
         return result['e']
 
     def handle_complete(self, data):
@@ -148,29 +151,29 @@ class Supervisor(object):
         if objective_id not in self.callbacks['objectives']:
             return {'result': 1, 'error': 'No objective exists for the provided identifier: ' + objective_id}
 
-        if objective_id in self.progress:
+        if objective_id in self.context.progress:
             return {'result': 1, 'error': 'A result has already been been registered for objective: ' + objective_id}
 
         fn = self.callbacks['objectives'][objective_id]
 
-        self.progress[objective_id] = fn(self.spec, **data)
+        self.context.progress[objective_id] = fn(self.context, **data)
         return {'result': 0}
 
     def handle_get(self, route):
-        if not route in self.spec['routes'] or not 'get' in self.spec['routes'][route]:
+        if not route in self.config['routes'] or not 'get' in self.config['routes'][route]:
             raise UnknownRouteError(route)
 
         if route in self.callbacks['get']:
             return self.callbacks['get'][route]()
 
-        if not 'fields' in self.spec['routes'][route]['get']:
+        if not 'fields' in self.config['routes'][route]['get']:
             with self.lock:
                 return self.__toJSON(self.data[route]) if route in self.data else {}
 
         retval = {}
-        for key in self.spec['routes'][route]['get']['fields']:
-            field_type = self.spec['routes'][route]['get']['fields'][key]['type'] if 'type' in self.spec['routes'][route]['get']['fields'][key] else None
-            field_name = self.spec['routes'][route]['get']['fields'][key]['name'] if 'name' in self.spec['routes'][route]['get']['fields'][key] else key
+        for key in self.config['routes'][route]['get']['fields']:
+            field_type = self.config['routes'][route]['get']['fields'][key]['type'] if 'type' in self.config['routes'][route]['get']['fields'][key] else None
+            field_name = self.config['routes'][route]['get']['fields'][key]['name'] if 'name' in self.config['routes'][route]['get']['fields'][key] else key
 
             if field_type == 'image':
 
@@ -194,13 +197,13 @@ class Supervisor(object):
         return retval
 
     def handle_post(self, route, data):
-        if not route in self.spec['routes'] or not 'post' in self.spec['routes'][route]:
+        if not route in self.config['routes'] or not 'post' in self.config['routes'][route]:
             raise UnknownRouteError(route)
 
         if not route in self.callbacks['post']:
             raise UnknownCallbackError(route, 'post')
 
-        return self.callbacks['post'][route](**data)
+        return self.callbacks['post'][route](self.context, **data)
 
     def run(self, supervisor_address='172.17.0.1', supervisor_port=8081, client_address='127.0.0.1', client_port=8082):
         app1 = Flask(__name__) # Interface to benchbot
@@ -233,7 +236,7 @@ class Supervisor(object):
         @app1.route('/locations')
         def locations():
             try:
-                return jsonify(self.spec['locations'])
+                return jsonify(self.config['locations'])
             except Exception as e:
                 pass
 
@@ -241,7 +244,7 @@ class Supervisor(object):
         # pylint: disable=unused-variable
         def location(location):
             try:
-                return jsonify(self.spec['locations'][location])
+                return jsonify(self.config['locations'][location])
             except Exception as e:
                 print('Error <location>:', str(e))
 
@@ -258,7 +261,7 @@ class Supervisor(object):
         # pylint: disable=unused-variable
         def objectives_available():
             try:
-                return jsonify([objective_id for objective_id in self.spec['objectives'] if self.can_complete(objective_id)])
+                return jsonify([objective_id for objective_id in self.config['objectives'] if self.can_complete(objective_id)])
             except Exception as e:
                 print(e)
 
@@ -266,14 +269,14 @@ class Supervisor(object):
         # pylint: disable=unused-variable
         def main():
             return jsonify({
-                'get': [self.spec['routes'][route]['name'] if 'name' in self.spec['routes'][route] else route for route in self.spec['routes'] if 'get' in self.spec['routes'][route]], 
-                'send': [self.spec['routes'][route]['name'] if 'name' in self.spec['routes'][route] else route for route in self.spec['routes'] if 'post' in self.spec['routes'][route]]
+                'get': [self.config['routes'][route]['name'] if 'name' in self.config['routes'][route] else route for route in self.config['routes'] if 'get' in self.config['routes'][route]], 
+                'send': [self.config['routes'][route]['name'] if 'name' in self.config['routes'][route] else route for route in self.config['routes'] if 'post' in self.config['routes'][route]]
             })
 
         @app2.route('/objectives')
         # pylint: disable=unused-variable
         def objectives():
-            return jsonify(self.spec['objectives'])
+            return jsonify(self.config['objectives'])
 
         @app2.route('/init', methods=['POST'])
         # pylint: disable=unused-variable
@@ -284,7 +287,7 @@ class Supervisor(object):
         @app2.route('/result', methods=['GET'])
         # pylint: disable=unused-variable
         def result():
-            return jsonify(self.progress)
+            return jsonify(self.context.progress)
 
         benchbot_server = WSGIServer((supervisor_address, supervisor_port), app1)
         benchbot_server.start()

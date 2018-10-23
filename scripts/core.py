@@ -25,28 +25,35 @@ def dispatch(velocity):
     except rospy.ServiceException as e:
         print('Service call failed:', e)
 
-def heading():
+def heading(context):
     current = rospy.wait_for_message('/amcl_pose', Pose, timeout=5)   
     current = current.pose.pose.orientation
 
     result = tf.transformations.euler_from_quaternion((current.x, current.y, current.z, current.w))
     return {'x': result[0], 'y': result[1], 'z': result[2]}
     
-
-def forward(x=0.5):
+def forward(context, x=0.5):
     if x <= 0:
         return {'result': 1, 'error': 'Distance must be greater than 0'}
         
     return dispatch(Twist(linear=Vector3(x, 0, 0)))    
 
-def left(r=1.0):
+def left(context, r=1.0):
     if r <= 0:
         return {'result': 1, 'error': 'Radians must be greater than 0'}
 
     return dispatch(Twist(angular=Vector3(0, 0, r)))
 
-def right(r=1.0):
+def right(context, r=1.0):
     if r <= 0:
         return {'result': 1, 'error': 'Radians must be greater than 0'}
         
     return dispatch(Twist(angular=Vector3(0, 0, -r)))
+
+def goto_next(context):
+    if context.goto_next.visited == None:
+        context.goto_next.visited = []
+
+    idx = len(context.goto_next.visited)
+
+    send_command = rospy.ServiceProxy('/navigator', Command)

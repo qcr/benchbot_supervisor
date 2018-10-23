@@ -5,9 +5,9 @@ import rospy
 import math
 from geometry_msgs.msg import PoseWithCovarianceStamped
 
-def at_position(config, objective):
+def at_position(context, objective):
     try:
-        objective = config['objectives'][objective_id]
+        objective = context.config['objectives'][objective_id]
 
         current_pose = rospy.wait_for_message('/amcl_pose', PoseWithCovarianceStamped, timeout=5)
         tolerance = objective['tolerance'] if 'tolerance' in objective else 0.3
@@ -32,13 +32,13 @@ def at_position(config, objective):
     
     return {'result': False}
 
-def at_location(config, objective):
+def at_location(context, objective):
     try:
-        objective = config['objectives'][objective]
+        objective = context.config['objectives'][objective]
         location = objective['location']
 
         current_pose = rospy.wait_for_message('/amcl_pose', PoseWithCovarianceStamped, timeout=5)
-        tolerance = objective['tolerance'] if 'tolerance' in config else 0.3
+        tolerance = objective['tolerance'] if 'tolerance' in context.config else 0.3
 
         position = (
             current_pose.pose.pose.position.x,
@@ -61,11 +61,11 @@ def at_location(config, objective):
     
     return {'result': False}
 
-def detected_objects_at_marker(config, objective, marker, detected):
+def detected_objects_at_marker(context, objective, marker, detected):
     expected = {}
     
-    for item in config['items']:
-        if 'marker' in item and config['markers'][item['marker']]['location'] == marker:
+    for item in context.config['items']:
+        if 'marker' in item and context.config['markers'][item['marker']]['location'] == marker:
             item_type = item['type']
             
             if item_type not in expected:
@@ -83,9 +83,9 @@ def detected_objects_at_marker(config, objective, marker, detected):
 
     return missed
 
-def detected_objects_at_location(config, objective, location, detected):
+def detected_objects_at_location(context, objective, location, detected):
     expected = {}
-    for item in config['items']:
+    for item in context.config['items']:
         if 'location' in item and item['location'] == location:
             item_type = item['type']
             
@@ -93,7 +93,7 @@ def detected_objects_at_location(config, objective, location, detected):
                 expected[item_type] = 0
             expected[item_type] += 1
 
-        elif 'marker' in item and config['markers'][item['marker']]['location'] == location:
+        elif 'marker' in item and context.config['markers'][item['marker']]['location'] == location:
             item_type = item['type']
             
             if item_type not in expected:
