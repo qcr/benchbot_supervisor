@@ -10,6 +10,7 @@ import signal
 import importlib
 import sys
 import gevent
+import copy
 from gevent.pywsgi import WSGIServer
 from gevent.event import Event
 from threading import Lock
@@ -203,7 +204,7 @@ class Supervisor(object):
         if not route in self.callbacks['post']:
             raise UnknownCallbackError(route, 'post')
 
-        return self.callbacks['post'][route](self.context, **data)
+        return self.callbacks['post'][route](self.context, route, **data)
 
     def run(self, supervisor_address='172.17.0.1', supervisor_port=8081, client_address='127.0.0.1', client_port=8082):
         app1 = Flask(__name__) # Interface to benchbot

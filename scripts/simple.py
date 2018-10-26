@@ -7,7 +7,7 @@ from geometry_msgs.msg import PoseWithCovarianceStamped
 
 def at_position(context, objective):
     try:
-        objective = context.config['objectives'][objective_id]
+        objective = context.config['objectives'][objective]
 
         current_pose = rospy.wait_for_message('/amcl_pose', PoseWithCovarianceStamped, timeout=5)
         tolerance = objective['tolerance'] if 'tolerance' in objective else 0.3

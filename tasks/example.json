@@ -74,11 +74,25 @@
                 "callback": "core/right"
             }
         },
+        "next": {
+            "post": {
+                "callback": "core/goto_next",
+                "locations": [
+                    "location_1", 
+                    "location_2",
+                    "location_3"
+                ]
+            }
+        },
         "is_done": {
             "get": {
                 "callback": "core/is_done"
             }
         }
+    },
+    "home": {
+      "position": {"x": -7.5, "y": -17.3, "z": 0.0},
+      "heading": {"x": 0, "y": 0, "z": 0, "w": 1}
     },
     "objectives": {
         "goal_1a": {
@@ -106,22 +120,17 @@
         }
     },
     "locations": {
-        "kitchen": {
-            "position": {"x": 3, "y": 7},
-            "radius": 0.3
+        "location_1": {
+            "position": {"x": 2, "y": 4},
+            "heading": {"x": 0, "y": 0, "z": 0, "w": 1}
         },
-        "lounge": {
-            "bounds": [
-                {"x": 3, "y": 7},
-                {"x": 3, "y": 7},
-                {"x": 3, "y": 7},
-                {"x": 3, "y": 7}
-            ]
-        }
-    },
-    "markers": {
-        "april_23": {
-            "location": "kitchen"
+        "location_2": {
+            "position": {"x": 5, "y": 4},
+            "heading": {"x": 0, "y": 0, "z": 0, "w": 1}
+        },
+        "location_3": {
+            "position": {"x": 2, "y": 4},
+            "heading": {"x": 0, "y": 0, "z": 1, "w": 0}
         }
     },
     "items": [
