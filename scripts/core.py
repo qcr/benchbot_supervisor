@@ -9,6 +9,7 @@ import actionlib
 from geometry_msgs.msg import *
 from actionlib_msgs.msg import GoalStatus, GoalID
 from move_base_msgs.msg import MoveBaseGoal, MoveBaseAction
+from navigator.srv import LocationPose
 
 from benchbot_teleop.srv import Command
 
@@ -62,23 +63,18 @@ def goto_next(context, route_id):
 
     try:
         location_id = context.config['routes'][route_id]['post']['locations'][idx]
-        location = context.config['locations'][location_id]
+        
+        rospy.wait_for_service('/navigation/get_location_pose')
+        get_location = rospy.ServiceProxy('/navigation/get_location_pose', LocationPose)
 
+        location = get_location(location_id)
+        print(location)
         pose_stamped = PoseStamped()
 
         pose_stamped.header.stamp = rospy.Time.now()
         pose_stamped.header.frame_id = '/map'
         
-        pose_stamped.pose.position = Point(
-            x=location['position']['x'],
-            y=location['position']['y']
-        )
-        pose_stamped.pose.orientation = Quaternion(
-            x=location['heading']['x'],
-            y=location['heading']['y'],
-            z=location['heading']['z'],
-            w=location['heading']['w']
-        )
+        pose_stamped.pose = location.pose
 
         move_goal = MoveBaseGoal()
         move_goal.target_pose = pose_stamped
@@ -87,9 +83,16 @@ def goto_next(context, route_id):
         client.wait_for_server()
 
         client.send_goal_and_wait(move_goal)
+        client.stop_tracking_goal()
+
         context.goto_next.append(location_id)
         return  {'result': 0}
 
     except IndexError:
         return {'result': 1, 'error': 'All locations have been visted'}
     #send_command = rospy.ServiceProxy('/navigator', Command)
+
+def current_location(context, route_id):
+  if not hasattr(context, 'goto_next'):
+        setattr(context, 'goto_next', [])
+  return {'location_id': context.goto_next[-1] if len(context.goto_next) > 0 else 'home'}

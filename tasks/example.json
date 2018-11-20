@@ -90,10 +90,6 @@
             }
         }
     },
-    "home": {
-      "position": {"x": -7.5, "y": -17.3, "z": 0.0},
-      "heading": {"x": 0, "y": 0, "z": 0, "w": 1}
-    },
     "objectives": {
         "goal_1a": {
             "callback": "simple/at_position",
@@ -117,20 +113,6 @@
         "goal_3": {
             "callback": "simple/detected_objects_at_location",
             "location": "living_room"
-        }
-    },
-    "locations": {
-        "location_1": {
-            "position": {"x": 2, "y": 4},
-            "heading": {"x": 0, "y": 0, "z": 0, "w": 1}
-        },
-        "location_2": {
-            "position": {"x": 5, "y": 4},
-            "heading": {"x": 0, "y": 0, "z": 0, "w": 1}
-        },
-        "location_3": {
-            "position": {"x": 2, "y": 4},
-            "heading": {"x": 0, "y": 0, "z": 1, "w": 0}
         }
     },
     "items": [

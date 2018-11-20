@@ -7,7 +7,9 @@ import cv2
 import base64
 import json
 import signal
+import actionlib
 import importlib
+import os
 import sys
 import gevent
 import copy
@@ -15,7 +17,9 @@ from gevent.pywsgi import WSGIServer
 from gevent.event import Event
 from threading import Lock
 
-from navigator.srv import NavigationGoto
+from move_base_msgs.msg import MoveBaseGoal, MoveBaseAction
+from geometry_msgs.msg import PoseStamped
+from navigator.srv import Locations, LocationPose
 from cv_bridge import CvBridge, CvBridgeError
 
 class SupervisorException(Exception):
@@ -64,7 +68,7 @@ class Supervisor(object):
 
         self.config = {}
         self.data = {}
-
+        self.x = 0
         self.bridge = CvBridge()
         self.lock = Lock()
 
@@ -103,7 +107,6 @@ class Supervisor(object):
             if 'callback' in self.config['objectives'][objective_id]:
                 self.register_callback(objective_id, self.config['objectives'][objective_id]['callback'], 'objectives')
 
-
     def register_subscriber(self, route_id, topic_name, topic_type_name):
         module, typename = topic_type_name.split('/')
         topic_type = getattr(importlib.import_module(module + '.msg'), typename)
@@ -115,8 +118,26 @@ class Supervisor(object):
         self.callbacks[method][route] = func
 
     def handle_initialise(self):
-        goto_service = rospy.ServiceProxy('/navigation/goto', NavigationGoto)
-        print('Moved to:', goto_service('home').result)
+        rospy.wait_for_service('/navigation/get_location_pose')
+        get_location = rospy.ServiceProxy('/navigation/get_location_pose', LocationPose)
+
+        location = get_location('home')
+        pose_stamped = PoseStamped()
+
+        pose_stamped.header.stamp = rospy.Time.now()
+        pose_stamped.header.frame_id = '/map'
+        
+        pose_stamped.pose = location.pose
+
+        move_goal = MoveBaseGoal()
+        move_goal.target_pose = pose_stamped
+        
+        client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
+        client.wait_for_server()
+
+        result = client.send_goal_and_wait(move_goal)
+        
+        print('Moved to:', result)
         self.context = Context(self.config)
 
     def can_complete(self, objective_id):
@@ -165,7 +186,7 @@ class Supervisor(object):
             raise UnknownRouteError(route)
 
         if route in self.callbacks['get']:
-            return self.callbacks['get'][route]()
+            return self.callbacks['get'][route](self.context, route)
 
         if not 'fields' in self.config['routes'][route]['get']:
             with self.lock:
@@ -180,7 +201,8 @@ class Supervisor(object):
 
                 with self.lock:
                     img = self.bridge.imgmsg_to_cv2(self.data[route], "bgr8")
-
+                cv2.imwrite('/home/guest/' + str(self.x) + '.jpg', img)
+                self.x += 1
                 _, buf = cv2.imencode('.png', img)
                 retval[field_name] = base64.b64encode(buf)
             else:
@@ -206,7 +228,7 @@ class Supervisor(object):
 
         return self.callbacks['post'][route](self.context, route, **data)
 
-    def run(self, supervisor_address='172.17.0.1', supervisor_port=8081, client_address='127.0.0.1', client_port=8082):
+    def run(self, supervisor_address='172.17.0.1', supervisor_port=8081, client_address='0.0.0.0', client_port=8082):
         app1 = Flask(__name__) # Interface to benchbot
         app2 = Flask(__name__) # Interface to web UI
 
@@ -220,7 +242,8 @@ class Supervisor(object):
             except UnknownCallbackError:
                 abort(500)
             except Exception as e:
-                print('Error <get>:', str(e))
+              print('Error <get>:', str(e))
+              abort(500)
 
         @app1.route('/<route>', methods=['POST'])
         # pylint: disable=unused-variable
@@ -234,20 +257,67 @@ class Supervisor(object):
             except Exception as e:
                 print(str(e))
 
-        @app1.route('/locations')
+        @app1.route('/locations', methods=['GET'])
+        # pylint: disable=unused-variable
         def locations():
             try:
-                return jsonify(self.config['locations'])
-            except Exception as e:
-                pass
+              rospy.wait_for_service('/navigation/get_locations')
+              get_locations = rospy.ServiceProxy('/navigation/get_locations', Locations)
+              
+              locations = []
+              for location in get_locations().result.locations:
+                if location.location_id not in self.config['locations']:
+                  continue
+                
+                locations.append({
+                  'id': location.location_id,
+                  'position': {
+                    'x': location.marker.pose.position.x, 
+                    'y': location.marker.pose.position.y, 
+                    'z': location.marker.pose.position.z
+                  },
+                  'orientation': {
+                    'x': location.marker.pose.orientation.x, 
+                    'y': location.marker.pose.orientation.y, 
+                    'z': location.marker.pose.orientation.z, 
+                    'w': location.marker.pose.orientation.w,
+                  }
+                })
 
-        @app1.route('/locations/<location>', methods=['GET'])
-        # pylint: disable=unused-variable
-        def location(location):
-            try:
-                return jsonify(self.config['locations'][location])
+              return jsonify(locations)
             except Exception as e:
-                print('Error <location>:', str(e))
+              print(str(e))
+              abort(500)
+
+        @app1.route('/locations/<location_id>', methods=['GET'])
+        # pylint: disable=unused-variable
+        def location(location_id):
+            try:
+              if location_id not in self.config['locations']:
+                raise Exception('Unknown location - ' + location_id)
+
+              rospy.wait_for_service('/navigation/get_location_pose')
+              get_location = rospy.ServiceProxy('/navigation/get_location_pose', LocationPose)
+
+              location = get_location(location_id)
+              
+              return jsonify({
+                  'id': location_id,
+                  'position': {
+                    'x': location.pose.position.x, 
+                    'y': location.pose.position.y, 
+                    'z': location.pose.position.z
+                  },
+                  'orientation': {
+                    'x': location.pose.orientation.x, 
+                    'y': location.pose.orientation.y, 
+                    'z': location.pose.orientation.z, 
+                    'w': location.pose.orientation.w,
+                  }
+                })
+            except Exception as e:
+              print('Error <location>:', str(e))
+              abort(500)
 
 
         @app1.route('/complete', methods=['POST'])
@@ -290,6 +360,7 @@ class Supervisor(object):
         def result():
             return jsonify(self.context.progress)
 
+        app1.debug = True
         benchbot_server = WSGIServer((supervisor_address, supervisor_port), app1)
         benchbot_server.start()
 

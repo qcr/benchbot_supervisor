@@ -1,9 +1,7 @@
 <launch>
-  <arg name="task" default="$(find benchbot_supervisor)/tasks/example.json" />
+  <arg name="task" doc="Task definition file" />
+  <arg name="locations" doc="Location definition file" />
 
-  <include file="$(find navigator)/launch/navigator.launch">
-    <arg name="locations" value="$(find benchbot_supervisor)/data/default.json" />
-  </include>
-
-  <node pkg="benchbot_supervisor" type="benchbot_supervisor" name="benchbot_supervisor" args="$(arg task)" />
+  <node pkg="navigator" type="location_server" name="location_server" args="$(find benchbot_supervisor)/locations/$(arg locations).json" output="screen" />
+  <node pkg="benchbot_supervisor" type="benchbot_supervisor" name="benchbot_supervisor" args="$(find benchbot_supervisor)/tasks/$(arg task).json" output="screen" />
 </launch>

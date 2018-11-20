@@ -3,7 +3,31 @@ from __future__ import print_function
 
 import rospy
 import math
+
+from collections import Counter
 from geometry_msgs.msg import PoseWithCovarianceStamped
+
+def comparer(context, id, data):
+  try:
+        objective = context.config['objectives'][id]
+        expected = objective['expected']
+        result = {'accuracy': 0, 'tp': 0, 'fp': 0, 'fn': 0, 'tn': 0}
+        
+        for idx in expected:
+          a = Counter(expected[idx])
+          b = Counter(data[idx] if idx in data else [])
+
+          result['tp'] += len(list((a & b).elements()))
+          result['fn'] += len(list((a - b).elements()))
+          result['fp'] += len(list((b - a).elements()))
+
+        result['accuracy'] = result['tp'] / float(result['tp'] + result['fn'] + result['fp'])
+        return result
+        
+  except Exception as e:
+    print(str(e))
+  
+  return  {'accuracy': 0}
 
 def at_position(context, objective):
     try:
@@ -118,6 +142,8 @@ def detected_objects_at_location(context, objective, location, detected):
 if __name__ == '__main__':
     from benchbot_supervisor import Supervisor
 
-    supervisor = Supervisor('tasks/example.json')
-    print(detected_objects_at_location(supervisor.spec, 'moo', 'kitchen', {'duck': 1, 'toy_car': 1}))
-    print(detected_objects_at_marker(supervisor.spec, 'moo', 'kitchen', {'duck': 1}))
+    supervisor = Supervisor('tasks/guiabot_demo.json')
+    print(comparer(supervisor.context, 'main', {
+      "location_3": ["bottle"]
+    }))
+    #print(detected_objects_at_marker(supervisor.spec, 'moo', 'kitchen', {'duck': 1}))
