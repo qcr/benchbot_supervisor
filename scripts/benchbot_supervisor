@@ -15,7 +15,7 @@ import gevent
 import copy
 from gevent.pywsgi import WSGIServer
 from gevent.event import Event
-from threading import Lock
+from threading import Condition
 
 from move_base_msgs.msg import MoveBaseGoal, MoveBaseAction
 from geometry_msgs.msg import PoseStamped
@@ -23,384 +23,400 @@ from navigator.srv import Locations, LocationPose
 from cv_bridge import CvBridge, CvBridgeError
 
 class SupervisorException(Exception):
-    pass
+  pass
 
 class UnknownRouteError(SupervisorException):
-    def __init__(self, route):
-        SupervisorException.__init__(self)
-        self.route = route
+  def __init__(self, route):
+    SupervisorException.__init__(self)
+    self.route = route
 
-    def __str__(self):
-        return 'Unknown route: ' + self.route
+  def __str__(self):
+    return 'Unknown route: ' + self.route
 
 class UnknownCallbackError(SupervisorException):
-    def __init__(self, route, method):
-        SupervisorException.__init__(self)
-        self.route = route
-        self.method = method
+  def __init__(self, route, method):
+    SupervisorException.__init__(self)
+    self.route = route
+    self.method = method
 
-    def __str__(self):
-        return 'Unknown callback: ' + self.route + ' <' + self.method + '>'
+  def __str__(self):
+    return 'Unknown callback: ' + self.route + ' <' + self.method + '>'
 
 class Context:
-    def __init__(self, config):
-        self.config = copy.deepcopy(config)
-        self.progress = {}
-    
+  def __init__(self, config):
+    self.config = copy.deepcopy(config)
+    self.progress = {}
+  
 class Supervisor(object):
-    def __init__(self, task_file=None):
-        """
-        Constructor.
+  def __init__(self, task_file=None):
+    """
+    Constructor.
 
-        @param task_file: the task file from which to load the spec.
-          If no task file is provided, Supervisor.load(task_file) must be called instead.
-        @type  task_file: str
-        @raise SupervisorException: if task file is malformed
-        """
-        rospy.init_node('benchbot_supervisor')
+    @param task_file: the task file from which to load the spec.
+      If no task file is provided, Supervisor.load(task_file) must be called instead.
+    @type  task_file: str
+    @raise SupervisorException: if task file is malformed
+    """
+    rospy.init_node('benchbot_supervisor')
 
-        self.subscribers = []
-        self.callbacks = {
-            'get': {},
-            'post': {},
-            'objectives': {}
-        }
+    self.subscribers = []
+    self.callbacks = {
+      'get': {},
+      'post': {},
+      'objectives': {}
+    }
 
-        self.config = {}
-        self.data = {}
-        self.x = 0
-        self.bridge = CvBridge()
-        self.lock = Lock()
+    self.config = {}
+    self.data = {}
+    self.x = 0
+    self.bridge = CvBridge()
+    self.conditions = {}
 
-        if task_file:
-            self.load(task_file)
+    if task_file:
+      self.load(task_file)
 
-        self.context = Context(self.config)
+    self.context = Context(self.config)
 
-    def load(self, filename):
-        with open(filename) as f:
-            self.config = json.loads(f.read())
+  def load(self, filename):
+    with open(filename) as f:
+      self.config = json.loads(f.read())
 
-        for route_id in self.config['routes']:
-            if 'get' in self.config['routes'][route_id]:
+    for route_id in self.config['routes']:
+      if 'get' in self.config['routes'][route_id]:
 
-                if 'topic' in self.config['routes'][route_id]['get']:
-                    if not 'topic_type' in self.config['routes'][route_id]['get']:
-                        raise Exception('Missing topic type for route: ' + route_id)
+        if 'topic' in self.config['routes'][route_id]['get']:
+          if not 'topic_type' in self.config['routes'][route_id]['get']:
+            raise Exception('Missing topic type for route: ' + route_id)
+          
+          print('Registering GET route for', route_id, 'from topic', self.config['routes'][route_id]['get']['topic'])
+          self.register_subscriber(route_id, self.config['routes'][route_id]['get']['topic'], self.config['routes'][route_id]['get']['topic_type'])
 
-                    self.register_subscriber(route_id, self.config['routes'][route_id]['get']['topic'], self.config['routes'][route_id]['get']['topic_type'])
+        elif 'callback' in self.config['routes'][route_id]['get']:
+          print('Registering GET route for', route_id, 'from callback', self.config['routes'][route_id]['get']['callback'])
+          self.register_callback(route_id, self.config['routes'][route_id]['get']['callback'], 'get')
 
-                elif 'callback' in self.config['routes'][route_id]['get']:
-                    self.register_callback(route_id, self.config['routes'][route_id]['get']['callback'], 'get')
+        else:
+          raise Exception('Required topic or callback missing for get method of route: ' + route_id)
 
-                else:
-                    raise Exception('Required topic or callback missing for get method of route: ' + route_id)
+      if 'post' in self.config['routes'][route_id]:
+        if 'callback' in self.config['routes'][route_id]['post']:
+          print('Registering POST route for', route_id, 'from callback', self.config['routes'][route_id]['post']['callback'])
+          self.register_callback(route_id, self.config['routes'][route_id]['post']['callback'], 'post')
 
-            if 'post' in self.config['routes'][route_id]:
-                if 'callback' in self.config['routes'][route_id]['post']:
-                    self.register_callback(route_id, self.config['routes'][route_id]['post']['callback'], 'post')
+        else:
+          raise Exception('Required topic or callback missing for post method of route: ' + route_id)
 
-                else:
-                    raise Exception('Required topic or callback missing for post method of route: ' + route_id)
+    for objective_id in self.config['objectives']:
+      if 'callback' in self.config['objectives'][objective_id]:
+        self.register_callback(objective_id, self.config['objectives'][objective_id]['callback'], 'objectives')
 
-        for objective_id in self.config['objectives']:
-            if 'callback' in self.config['objectives'][objective_id]:
-                self.register_callback(objective_id, self.config['objectives'][objective_id]['callback'], 'objectives')
+  def register_subscriber(self, route_id, topic_name, topic_type_name):
+    module, typename = topic_type_name.split('/')
+    topic_type = getattr(importlib.import_module(module + '.msg'), typename)
+    self.subscribers.append(rospy.Subscriber(topic_name, topic_type, self.__updater(route_id)))
+    self.conditions[route_id] = Condition()
 
-    def register_subscriber(self, route_id, topic_name, topic_type_name):
-        module, typename = topic_type_name.split('/')
-        topic_type = getattr(importlib.import_module(module + '.msg'), typename)
-        self.subscribers.append(rospy.Subscriber(topic_name, topic_type, self.__updater(route_id)))
+  def register_callback(self, route, callback_type_name, method='post'):
+    module, typename = callback_type_name.split('/')
+    func = getattr(importlib.import_module(module), typename)
+    self.callbacks[method][route] = func
 
-    def register_callback(self, route, callback_type_name, method='post'):
-        module, typename = callback_type_name.split('/')
-        func = getattr(importlib.import_module(module), typename)
-        self.callbacks[method][route] = func
+  def handle_initialise(self):
+    rospy.wait_for_service('/navigation/get_location_pose')
+    get_location = rospy.ServiceProxy('/navigation/get_location_pose', LocationPose)
 
-    def handle_initialise(self):
+    location = get_location('home')
+    pose_stamped = PoseStamped()
+
+    pose_stamped.header.stamp = rospy.Time.now()
+    pose_stamped.header.frame_id = '/map'
+    
+    pose_stamped.pose = location.pose
+
+    move_goal = MoveBaseGoal()
+    move_goal.target_pose = pose_stamped
+    
+    client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
+    client.wait_for_server()
+
+    result = client.send_goal_and_wait(move_goal)
+    
+    print('Moved to:', result)
+    self.context = Context(self.config)
+
+  def can_complete(self, objective_id):
+    result = {}
+
+    if not objective_id in self.config['objectives']:
+      return False
+
+    if not 'depends' in self.config['objectives'][objective_id]:
+      return True
+
+    statement = self.config['objectives'][objective_id]['depends']
+
+    statement = statement.replace('(', '( ').replace(')', ' )').replace('!', '! ')
+
+    tokens = statement.split()
+    opts = {}
+
+    for token in tokens:
+      if token == '(' or token == ')' or token == '&&' or token == '||' or token == '!':
+        continue
+      opts[token] = token in self.context.progress
+
+    exec('e=' + statement.replace('&&', 'and').replace('||', 'or').replace('!', 'not'), opts, result)
+    return result['e']
+
+  def handle_complete(self, data):
+    if 'id' not in data:
+      return {'result': 1, 'error': 'No objective identifier with the supplied'}
+
+    objective_id = data['id']
+    
+    if objective_id not in self.callbacks['objectives']:
+      return {'result': 1, 'error': 'No objective exists for the provided identifier: ' + objective_id}
+
+    if objective_id in self.context.progress:
+      return {'result': 1, 'error': 'A result has already been been registered for objective: ' + objective_id}
+
+    fn = self.callbacks['objectives'][objective_id]
+
+    self.context.progress[objective_id] = fn(self.context, **data)
+    return {'result': 0}
+
+  def handle_get(self, route):
+    if not route in self.config['routes'] or not 'get' in self.config['routes'][route]:
+      raise UnknownRouteError(route)
+
+    if route in self.callbacks['get']:
+      return self.callbacks['get'][route](self.context, route)
+
+    is_latching = 'latch' in self.config['routes'][route]['get'] and self.config['routes'][route]['get']['latch']
+    data = {}
+
+    self.conditions[route].acquire()
+    
+    if not is_latching:
+      self.conditions[route].wait(10)
+      data = copy.deepcopy(self.data[route]) if route in self.data else {}
+    else:
+      data = copy.deepcopy(self.data[route]) if route in self.data else {}
+    
+    self.conditions[route].release()
+    
+    if not 'fields' in self.config['routes'][route]['get']:
+      return self.__toJSON(data)
+
+    retval = {}
+    for key in self.config['routes'][route]['get']['fields']:
+      field_type = self.config['routes'][route]['get']['fields'][key]['type'] if 'type' in self.config['routes'][route]['get']['fields'][key] else None
+      field_name = self.config['routes'][route]['get']['fields'][key]['name'] if 'name' in self.config['routes'][route]['get']['fields'][key] else key
+
+      if field_type == 'image':
+        img = self.bridge.imgmsg_to_cv2(data, "bgr8")
+        cv2.imwrite('/home/guest/' + str(self.x) + '.jpg', img)
+        self.x += 1
+        _, buf = cv2.imencode('.png', img)
+        retval[field_name] = base64.b64encode(buf)
+      else:
+        steps = key.split('.')
+
+        retval[field_name] = getattr(data, steps.pop(0))
+
+        for step in steps:
+          retval[field_name] = getattr(retval[field_name], step)
+
+        if hasattr(retval[field_name], '__slots__'):
+          retval[field_name] = Supervisor.__toJSON(retval[field_name])
+
+    return retval
+
+  def handle_post(self, route, data):
+    if not route in self.config['routes'] or not 'post' in self.config['routes'][route]:
+      raise UnknownRouteError(route)
+
+    if not route in self.callbacks['post']:
+      raise UnknownCallbackError(route, 'post')
+
+    return self.callbacks['post'][route](self.context, route, **data)
+
+  def run(self, supervisor_address='172.17.0.1', supervisor_port=8081, client_address='0.0.0.0', client_port=8082):
+    app1 = Flask(__name__) # Interface to benchbot
+    app2 = Flask(__name__) # Interface to web UI
+    import traceback
+
+    @app1.route('/<route>', methods=['GET'])
+    # pylint: disable=unused-variable
+    def get(route):
+      try:
+        return jsonify(self.handle_get(route))
+      except UnknownRouteError:
+        abort(404)
+      except UnknownCallbackError:
+        abort(500)
+      except Exception as e:
+        print('Error <get>:', traceback.print_exc())
+        abort(500)
+
+    @app1.route('/<route>', methods=['POST'])
+    # pylint: disable=unused-variable
+    def post(route):
+      try:
+        return jsonify(self.handle_post(route, request.get_json(silent=True)))
+      except UnknownRouteError:
+        abort(404)
+      except UnknownCallbackError:
+        abort(500)
+      except Exception as e:
+        print(str(e))
+
+    @app1.route('/locations', methods=['GET'])
+    # pylint: disable=unused-variable
+    def locations():
+      try:
+        rospy.wait_for_service('/navigation/get_locations')
+        get_locations = rospy.ServiceProxy('/navigation/get_locations', Locations)
+        
+        locations = []
+        for location in get_locations().result.locations:
+          if location.location_id not in self.config['locations']:
+            continue
+          
+          locations.append({
+            'id': location.location_id,
+            'position': {
+              'x': location.marker.pose.position.x, 
+              'y': location.marker.pose.position.y, 
+              'z': location.marker.pose.position.z
+            },
+            'orientation': {
+              'x': location.marker.pose.orientation.x, 
+              'y': location.marker.pose.orientation.y, 
+              'z': location.marker.pose.orientation.z, 
+              'w': location.marker.pose.orientation.w,
+            }
+          })
+
+        return jsonify(locations)
+      except Exception as e:
+        print(str(e))
+        abort(500)
+
+    @app1.route('/locations/<location_id>', methods=['GET'])
+    # pylint: disable=unused-variable
+    def location(location_id):
+      try:
+        if location_id not in self.config['locations']:
+          raise Exception('Unknown location - ' + location_id)
+
         rospy.wait_for_service('/navigation/get_location_pose')
         get_location = rospy.ServiceProxy('/navigation/get_location_pose', LocationPose)
 
-        location = get_location('home')
-        pose_stamped = PoseStamped()
-
-        pose_stamped.header.stamp = rospy.Time.now()
-        pose_stamped.header.frame_id = '/map'
+        location = get_location(location_id)
         
-        pose_stamped.pose = location.pose
+        return jsonify({
+          'id': location_id,
+          'position': {
+            'x': location.pose.position.x, 
+            'y': location.pose.position.y, 
+            'z': location.pose.position.z
+          },
+          'orientation': {
+            'x': location.pose.orientation.x, 
+            'y': location.pose.orientation.y, 
+            'z': location.pose.orientation.z, 
+            'w': location.pose.orientation.w,
+          }
+        })
+      except Exception as e:
+        print('Error <location>:', str(e))
+        abort(500)
 
-        move_goal = MoveBaseGoal()
-        move_goal.target_pose = pose_stamped
-        
-        client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
-        client.wait_for_server()
+    @app1.route('/complete', methods=['POST'])
+    # pylint: disable=unused-variable
+    def complete():
+      try:
+        return jsonify(self.handle_complete(request.get_json(silent=True)))
+      except Exception as e:
+        print('Error <complete>:', str(e))
 
-        result = client.send_goal_and_wait(move_goal)
-        
-        print('Moved to:', result)
-        self.context = Context(self.config)
+    @app1.route('/objectives', methods=['GET'])
+    # pylint: disable=unused-variable
+    def objectives_available():
+      try:
+        return jsonify([objective_id for objective_id in self.config['objectives'] if self.can_complete(objective_id)])
+      except Exception as e:
+        print(e)
 
-    def can_complete(self, objective_id):
-        result = {}
+    @app2.route('/')
+    # pylint: disable=unused-variable
+    def main():
+      return jsonify({
+        'get': [self.config['routes'][route]['name'] if 'name' in self.config['routes'][route] else route for route in self.config['routes'] if 'get' in self.config['routes'][route]], 
+        'send': [self.config['routes'][route]['name'] if 'name' in self.config['routes'][route] else route for route in self.config['routes'] if 'post' in self.config['routes'][route]]
+      })
 
-        if not objective_id in self.config['objectives']:
-            return False
+    @app2.route('/objectives')
+    # pylint: disable=unused-variable
+    def objectives():
+      return jsonify(self.config['objectives'])
 
-        if not 'depends' in self.config['objectives'][objective_id]:
-            return True
+    @app2.route('/init', methods=['POST'])
+    # pylint: disable=unused-variable
+    def initialise():
+      self.handle_initialise()
+      return jsonify()
 
-        statement = self.config['objectives'][objective_id]['depends']
+    @app2.route('/result', methods=['GET'])
+    # pylint: disable=unused-variable
+    def result():
+      return jsonify(self.context.progress)
 
-        statement = statement.replace('(', '( ').replace(')', ' )').replace('!', '! ')
+    app1.debug = True
+    benchbot_server = WSGIServer((supervisor_address, supervisor_port), app1)
+    benchbot_server.start()
 
-        tokens = statement.split()
-        opts = {}
+    ui_server = WSGIServer((client_address, client_port), app2)
+    ui_server.start()
 
-        for token in tokens:
-            if token == '(' or token == ')' or token == '&&' or token == '||' or token == '!':
-                continue
-            opts[token] = token in self.context.progress
+    evt = Event()
 
-        exec('e=' + statement.replace('&&', 'and').replace('||', 'or').replace('!', 'not'), opts, result)
-        return result['e']
+    gevent.signal(signal.SIGQUIT, evt.set)
+    gevent.signal(signal.SIGTERM, evt.set)
+    gevent.signal(signal.SIGINT, evt.set)
 
-    def handle_complete(self, data):
-        if 'id' not in data:
-            return {'result': 1, 'error': 'No objective identifier with the supplied'}
+    print('Benchbot Supervisor started on', supervisor_address + ':' + str(supervisor_port))
+    print('Client Server started on', client_address + ':' + str(client_port))
+    evt.wait()
+    print("Shutting down server")
 
-        objective_id = data['id']
-        
-        if objective_id not in self.callbacks['objectives']:
-            return {'result': 1, 'error': 'No objective exists for the provided identifier: ' + objective_id}
+    benchbot_server.stop()
+    ui_server.stop()
 
-        if objective_id in self.context.progress:
-            return {'result': 1, 'error': 'A result has already been been registered for objective: ' + objective_id}
+  def __updater(self, route_id, latching=False):
+    def _updater(data):
+      self.conditions[route_id].acquire()
+      self.data[route_id] = data
+      self.conditions[route_id].notify()
+      self.conditions[route_id].release()
+      
+    return _updater
 
-        fn = self.callbacks['objectives'][objective_id]
-
-        self.context.progress[objective_id] = fn(self.context, **data)
-        return {'result': 0}
-
-    def handle_get(self, route):
-        if not route in self.config['routes'] or not 'get' in self.config['routes'][route]:
-            raise UnknownRouteError(route)
-
-        if route in self.callbacks['get']:
-            return self.callbacks['get'][route](self.context, route)
-
-        if not 'fields' in self.config['routes'][route]['get']:
-            with self.lock:
-                return self.__toJSON(self.data[route]) if route in self.data else {}
-
-        retval = {}
-        for key in self.config['routes'][route]['get']['fields']:
-            field_type = self.config['routes'][route]['get']['fields'][key]['type'] if 'type' in self.config['routes'][route]['get']['fields'][key] else None
-            field_name = self.config['routes'][route]['get']['fields'][key]['name'] if 'name' in self.config['routes'][route]['get']['fields'][key] else key
-
-            if field_type == 'image':
-
-                with self.lock:
-                    img = self.bridge.imgmsg_to_cv2(self.data[route], "bgr8")
-                cv2.imwrite('/home/guest/' + str(self.x) + '.jpg', img)
-                self.x += 1
-                _, buf = cv2.imencode('.png', img)
-                retval[field_name] = base64.b64encode(buf)
-            else:
-                steps = key.split('.')
-
-                with self.lock:
-                    retval[field_name] = getattr(self.data[route], steps.pop(0))
-
-                for step in steps:
-                    retval[field_name] = getattr(retval[field_name], step)
-
-                if hasattr(retval[field_name], '__slots__'):
-                    retval[field_name] = Supervisor.__toJSON(retval[field_name])
-
-        return retval
-
-    def handle_post(self, route, data):
-        if not route in self.config['routes'] or not 'post' in self.config['routes'][route]:
-            raise UnknownRouteError(route)
-
-        if not route in self.callbacks['post']:
-            raise UnknownCallbackError(route, 'post')
-
-        return self.callbacks['post'][route](self.context, route, **data)
-
-    def run(self, supervisor_address='172.17.0.1', supervisor_port=8081, client_address='0.0.0.0', client_port=8082):
-        app1 = Flask(__name__) # Interface to benchbot
-        app2 = Flask(__name__) # Interface to web UI
-
-        @app1.route('/<route>', methods=['GET'])
-        # pylint: disable=unused-variable
-        def get(route):
-            try:
-                return jsonify(self.handle_get(route))
-            except UnknownRouteError:
-                abort(404)
-            except UnknownCallbackError:
-                abort(500)
-            except Exception as e:
-              print('Error <get>:', str(e))
-              abort(500)
-
-        @app1.route('/<route>', methods=['POST'])
-        # pylint: disable=unused-variable
-        def post(route):
-            try:
-                return jsonify(self.handle_post(route, request.get_json(silent=True)))
-            except UnknownRouteError:
-                abort(404)
-            except UnknownCallbackError:
-                abort(500)
-            except Exception as e:
-                print(str(e))
-
-        @app1.route('/locations', methods=['GET'])
-        # pylint: disable=unused-variable
-        def locations():
-            try:
-              rospy.wait_for_service('/navigation/get_locations')
-              get_locations = rospy.ServiceProxy('/navigation/get_locations', Locations)
-              
-              locations = []
-              for location in get_locations().result.locations:
-                if location.location_id not in self.config['locations']:
-                  continue
-                
-                locations.append({
-                  'id': location.location_id,
-                  'position': {
-                    'x': location.marker.pose.position.x, 
-                    'y': location.marker.pose.position.y, 
-                    'z': location.marker.pose.position.z
-                  },
-                  'orientation': {
-                    'x': location.marker.pose.orientation.x, 
-                    'y': location.marker.pose.orientation.y, 
-                    'z': location.marker.pose.orientation.z, 
-                    'w': location.marker.pose.orientation.w,
-                  }
-                })
-
-              return jsonify(locations)
-            except Exception as e:
-              print(str(e))
-              abort(500)
-
-        @app1.route('/locations/<location_id>', methods=['GET'])
-        # pylint: disable=unused-variable
-        def location(location_id):
-            try:
-              if location_id not in self.config['locations']:
-                raise Exception('Unknown location - ' + location_id)
-
-              rospy.wait_for_service('/navigation/get_location_pose')
-              get_location = rospy.ServiceProxy('/navigation/get_location_pose', LocationPose)
-
-              location = get_location(location_id)
-              
-              return jsonify({
-                  'id': location_id,
-                  'position': {
-                    'x': location.pose.position.x, 
-                    'y': location.pose.position.y, 
-                    'z': location.pose.position.z
-                  },
-                  'orientation': {
-                    'x': location.pose.orientation.x, 
-                    'y': location.pose.orientation.y, 
-                    'z': location.pose.orientation.z, 
-                    'w': location.pose.orientation.w,
-                  }
-                })
-            except Exception as e:
-              print('Error <location>:', str(e))
-              abort(500)
-
-
-        @app1.route('/complete', methods=['POST'])
-        # pylint: disable=unused-variable
-        def complete():
-            try:
-                return jsonify(self.handle_complete(request.get_json(silent=True)))
-            except Exception as e:
-                print('Error <complete>:', str(e))
-
-        @app1.route('/objectives', methods=['GET'])
-        # pylint: disable=unused-variable
-        def objectives_available():
-            try:
-                return jsonify([objective_id for objective_id in self.config['objectives'] if self.can_complete(objective_id)])
-            except Exception as e:
-                print(e)
-
-        @app2.route('/')
-        # pylint: disable=unused-variable
-        def main():
-            return jsonify({
-                'get': [self.config['routes'][route]['name'] if 'name' in self.config['routes'][route] else route for route in self.config['routes'] if 'get' in self.config['routes'][route]], 
-                'send': [self.config['routes'][route]['name'] if 'name' in self.config['routes'][route] else route for route in self.config['routes'] if 'post' in self.config['routes'][route]]
-            })
-
-        @app2.route('/objectives')
-        # pylint: disable=unused-variable
-        def objectives():
-            return jsonify(self.config['objectives'])
-
-        @app2.route('/init', methods=['POST'])
-        # pylint: disable=unused-variable
-        def initialise():
-            self.handle_initialise()
-            return jsonify()
-
-        @app2.route('/result', methods=['GET'])
-        # pylint: disable=unused-variable
-        def result():
-            return jsonify(self.context.progress)
-
-        app1.debug = True
-        benchbot_server = WSGIServer((supervisor_address, supervisor_port), app1)
-        benchbot_server.start()
-
-        ui_server = WSGIServer((client_address, client_port), app2)
-        ui_server.start()
-
-        evt = Event()
-
-        gevent.signal(signal.SIGQUIT, evt.set)
-        gevent.signal(signal.SIGTERM, evt.set)
-        gevent.signal(signal.SIGINT, evt.set)
-
-        print('Benchbot Supervisor started on', supervisor_address + ':' + str(supervisor_port))
-        print('Client Server started on', client_address + ':' + str(client_port))
-        evt.wait()
-        print("Shutting down server")
-
-        benchbot_server.stop()
-        ui_server.stop()
-
-    def __updater(self, route_id):
-        def _updater(data):
-            with self.lock:
-                self.data[route_id] = data
-        return _updater
-
-    @staticmethod
-    def __toJSON(data):
-        retval = {}
-        for key in data.__slots__:
-            if hasattr(getattr(data, key), '__slots__'):
-                retval[key] = Supervisor.__toJSON(getattr(data, key))
-            else:
-                retval[key] = getattr(data, key)
-        return retval
+  @staticmethod
+  def __toJSON(data):
+    retval = {}
+    for key in data.__slots__:
+      if hasattr(getattr(data, key), '__slots__'):
+        retval[key] = Supervisor.__toJSON(getattr(data, key))
+      else:
+        retval[key] = getattr(data, key)
+    return retval
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print('Error - missing task specification file. Usage: benchbot_supervisor TASK_FILE')
-        sys.exit(1)
+  if len(sys.argv) < 2:
+    print('Error - missing task specification file. Usage: benchbot_supervisor TASK_FILE')
+    sys.exit(1)
 
-    supervisor = Supervisor(sys.argv[1])
-    supervisor.run()
+  supervisor = Supervisor(sys.argv[1])
+  supervisor.run()

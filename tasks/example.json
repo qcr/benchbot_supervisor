@@ -46,12 +46,13 @@
         },
         "map": {
             "get": {
-                "topic": "/benchbot_workspace/costmap/costmap",
+                "topic": "/map",
                 "topic_type": "nav_msgs/OccupancyGrid",
                 "fields": {
                     "info": {},
                     "data": {}
-                }
+                },
+                "latch": true
             }
         },
         "heading": {
