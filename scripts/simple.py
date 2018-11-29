@@ -9,25 +9,39 @@ from geometry_msgs.msg import PoseWithCovarianceStamped
 
 def comparer(context, id, data):
   try:
-        objective = context.config['objectives'][id]
-        expected = objective['expected']
-        result = {'accuracy': 0, 'tp': 0, 'fp': 0, 'fn': 0, 'tn': 0}
-        
-        for idx in expected:
-          a = Counter(expected[idx])
-          b = Counter(data[idx] if idx in data else [])
+    objective = context.config['objectives'][id]
+    expected = objective['expected']
+    result = {'accuracy': 0, 'tp': 0, 'fp': 0, 'fn': 0, 'tn': 0}
+    
+    for idx in expected:
+      a = Counter(expected[idx])
+      b = Counter(data[idx] if idx in data else [])
 
-          result['tp'] += len(list((a & b).elements()))
-          result['fn'] += len(list((a - b).elements()))
-          result['fp'] += len(list((b - a).elements()))
+      result['tp'] += len(list((a & b).elements()))
+      result['fn'] += len(list((a - b).elements()))
+      result['fp'] += len(list((b - a).elements()))
 
-        result['accuracy'] = result['tp'] / float(result['tp'] + result['fn'] + result['fp'])
-        return result
+    result['accuracy'] = result['tp'] / float(result['tp'] + result['fn'] + result['fp'])
+    return result
         
   except Exception as e:
     print(str(e))
   
   return  {'accuracy': 0}
+
+def equals(context, id, data):
+  score = 0
+
+  try:
+    objective = context.config['objectives'][id]
+    expected = objective['expected']
+    
+    score += 1 if expected == data else 0
+
+  except Exception as e:
+    print(str(e))
+  
+  return  {'score': score}
 
 def at_position(context, objective):
     try:
@@ -146,4 +160,7 @@ if __name__ == '__main__':
     print(comparer(supervisor.context, 'main', {
       "location_3": ["bottle"]
     }))
+
+    supervisor = Supervisor('tasks/guiabot_demo_simple.json')
+    print(equals(supervisor.context, 'main', 'location_1'))
     #print(detected_objects_at_marker(supervisor.spec, 'moo', 'kitchen', {'duck': 1}))

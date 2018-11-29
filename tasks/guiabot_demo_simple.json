@@ -1,0 +1,67 @@
+{
+  "name": "S11 Exploration",
+  "robots": ["guiabot", "pepper"],
+  "routes": {
+      "image": {
+          "get": {
+              "topic": "/camera_front/color/image_raw",
+              "topic_type": "sensor_msgs/Image",
+              "fields": {
+                  "data": {
+                      "name": "image",
+                      "type": "image"
+                  }
+              }
+          }
+      },
+      "pose": {
+          "get": {
+              "topic": "/amcl_pose",
+              "topic_type": "geometry_msgs/PoseWithCovarianceStamped",
+              "fields": {
+                  "pose.pose.position.x": {
+                      "name": "x"
+                  },
+                  "pose.pose.position.y": {
+                      "name": "y"
+                  },
+                  "pose.pose.position.z": {
+                      "name": "z"
+                  }
+              }
+          }
+      },
+      "location": {
+        "get": {
+          "callback": "core/current_location"
+        }
+      },
+      "next": {
+          "post": {
+              "callback": "core/goto_next",
+              "locations": [
+                  "location_1",
+                  "location_2",
+                  "location_3"
+              ]
+          }
+      },
+      "is_done": {
+          "get": {
+              "callback": "core/is_done"
+          }
+      }
+  },
+  "locations": [
+    "home",
+    "location_1",
+    "location_2",
+    "location_3"
+  ],
+  "objectives": {
+      "main": {
+          "callback": "simple/equals",
+          "expected": "location_1"
+      }
+  }
+}
