@@ -1,5 +1,6 @@
 {
   "name": "S11 Exploration",
+  "robots": ["guiabot", "pepper"],
   "routes": {
       "image": {
           "get": {
@@ -67,15 +68,5 @@
             "location_3": ["person", "tvmonitor", "diningtable", "bowl"]
           }
       }
-  },
-  "items": [
-      {
-          "type": "duck",
-          "marker": "april_23"
-      },
-      {
-          "type": "toy_car",
-          "location": "kitchen"
-      }
-  ]
+  }
 }
