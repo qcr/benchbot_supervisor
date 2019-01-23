@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
-from flask import Flask, jsonify, request, abort
+from flask import Flask, jsonify, request, abort, send_file
 import rospy
 import cv2
 import base64
@@ -13,6 +13,7 @@ import os
 import sys
 import gevent
 import copy
+import StringIO
 from gevent.pywsgi import WSGIServer
 from gevent.event import Event
 from threading import Condition
@@ -46,6 +47,8 @@ class Context:
   def __init__(self, config):
     self.config = copy.deepcopy(config)
     self.progress = {}
+
+    self.data_store = None
   
 class Supervisor(object):
   def __init__(self, task_file=None):
@@ -349,6 +352,19 @@ class Supervisor(object):
       except Exception as e:
         print(e)
 
+    @app1.route('/data-store', methods=['POST'])
+    # pylint: disable=unused-variable
+    def data_store():
+      try:
+        data = request.get_json(silent=True)
+        if 'pickle' in data:
+          self.context.data_store = base64.b64decode(data['pickle'])
+        
+      except Exception as e:
+        print('Error <complete>:', str(e))
+
+      return jsonify({'result': 0})
+
     @app2.route('/')
     # pylint: disable=unused-variable
     def main():
@@ -371,7 +387,18 @@ class Supervisor(object):
     @app2.route('/result', methods=['GET'])
     # pylint: disable=unused-variable
     def result():
-      return jsonify(self.context.progress)
+      return jsonify({
+        'result': self.context.progress,
+        'has_data_store': self.context.data_store != None
+      })
+
+    @app2.route('/data-store', methods=['GET'])
+    # pylint: disable=unused-variable
+    def get_data_store():
+      out = StringIO.StringIO()
+      out.write(self.context.data_store)
+      out.seek(0)
+      return send_file(out, attachment_filename='store.pickle', as_attachment=True)
 
     app1.debug = True
     benchbot_server = WSGIServer((supervisor_address, supervisor_port), app1)

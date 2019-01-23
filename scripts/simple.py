@@ -43,9 +43,9 @@ def equals(context, id, data):
   
   return  {'score': score}
 
-def at_position(context, objective):
+def at_position(context, id):
     try:
-        objective = context.config['objectives'][objective]
+        objective = context.config['objectives'][id]
 
         current_pose = rospy.wait_for_message('/amcl_pose', PoseWithCovarianceStamped, timeout=5)
         tolerance = objective['tolerance'] if 'tolerance' in objective else 0.3
@@ -70,9 +70,9 @@ def at_position(context, objective):
     
     return {'result': False}
 
-def at_location(context, objective):
+def at_location(context, id):
     try:
-        objective = context.config['objectives'][objective]
+        objective = context.config['objectives'][id]
         location = objective['location']
 
         current_pose = rospy.wait_for_message('/amcl_pose', PoseWithCovarianceStamped, timeout=5)
@@ -99,11 +99,11 @@ def at_location(context, objective):
     
     return {'result': False}
 
-def detected_objects_at_marker(context, objective, marker, detected):
+def detected_objects_at_marker(context, id, marker, detected):
     expected = {}
     
     for item in context.config['items']:
-        if 'marker' in item and context.config['markers'][item['marker']]['location'] == marker:
+        if 'marker' in item and item['marker'] == marker:
             item_type = item['type']
             
             if item_type not in expected:
@@ -121,7 +121,7 @@ def detected_objects_at_marker(context, objective, marker, detected):
 
     return missed
 
-def detected_objects_at_location(context, objective, location, detected):
+def detected_objects_at_location(context, id, location, detected):
     expected = {}
     for item in context.config['items']:
         if 'location' in item and item['location'] == location:
