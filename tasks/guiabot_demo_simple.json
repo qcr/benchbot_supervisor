@@ -36,6 +36,11 @@
           "callback": "core/current_location"
         }
       },
+      "locations": {
+        "get": {
+          "callback": "core/get_locations"
+        }
+      },
       "next": {
           "post": {
               "callback": "core/goto_next",
@@ -44,6 +49,11 @@
                   "location_2",
                   "location_3"
               ]
+          }
+      },
+      "goto": {
+          "post": {
+              "callback": "core/goto"
           }
       },
       "is_done": {

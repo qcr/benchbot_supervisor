@@ -55,6 +55,29 @@ def right(context, route_id, r=1.0):
         
     return dispatch(Twist(angular=Vector3(0, 0, -r)))
 
+def goto(context, route_id, location_id):
+    rospy.wait_for_service('/navigation/get_location_pose')
+    get_location = rospy.ServiceProxy('/navigation/get_location_pose', LocationPose)
+
+    location = get_location(location_id)
+    print(location)
+    pose_stamped = PoseStamped()
+
+    pose_stamped.header.stamp = rospy.Time.now()
+    pose_stamped.header.frame_id = '/map'
+
+    pose_stamped.pose = location.pose
+
+    move_goal = MoveBaseGoal()
+    move_goal.target_pose = pose_stamped
+
+    client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
+    client.wait_for_server()
+
+    client.send_goal_and_wait(move_goal)
+    client.stop_tracking_goal()
+    return  {'result': 0}
+
 def goto_next(context, route_id):
     if not hasattr(context, 'goto_next'):
         setattr(context, 'goto_next', [])
@@ -96,3 +119,6 @@ def current_location(context, route_id):
   if not hasattr(context, 'goto_next'):
         setattr(context, 'goto_next', [])
   return {'location_id': context.goto_next[-1] if len(context.goto_next) > 0 else 'home'}
+
+def get_locations(context, route_id):
+  return context.config['locations']
