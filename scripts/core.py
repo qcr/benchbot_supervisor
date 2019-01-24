@@ -120,5 +120,55 @@ def current_location(context, route_id):
         setattr(context, 'goto_next', [])
   return {'location_id': context.goto_next[-1] if len(context.goto_next) > 0 else 'home'}
 
-def get_locations(context, route_id):
+def get_locations_from_task(context, route_id):
   return context.config['locations']
+  
+def get_locations_from_navigator(context, route_id):
+  rospy.wait_for_service('/navigation/get_locations')
+  get_locations = rospy.ServiceProxy('/navigation/get_locations', Locations)
+  
+  locations = []
+  for location in get_locations().result.locations:
+    if location.location_id not in context.config['locations']:
+      continue
+    
+    locations.append({
+      'id': location.location_id,
+      'position': {
+        'x': location.marker.pose.position.x, 
+        'y': location.marker.pose.position.y, 
+        'z': location.marker.pose.position.z
+      },
+      'orientation': {
+        'x': location.marker.pose.orientation.x, 
+        'y': location.marker.pose.orientation.y, 
+        'z': location.marker.pose.orientation.z, 
+        'w': location.marker.pose.orientation.w,
+      }
+    })
+
+  return locations
+
+def get_location_from_navigator(context, route_id, location_id):
+  if location_id not in context.config['locations']:
+    raise Exception('Unknown location - ' + location_id)
+
+  rospy.wait_for_service('/navigation/get_location_pose')
+  get_location = rospy.ServiceProxy('/navigation/get_location_pose', LocationPose)
+
+  location = get_location(location_id)
+  
+  return {
+    'id': location_id,
+    'position': {
+      'x': location.pose.position.x, 
+      'y': location.pose.position.y, 
+      'z': location.pose.position.z
+    },
+    'orientation': {
+      'x': location.pose.orientation.x, 
+      'y': location.pose.orientation.y, 
+      'z': location.pose.orientation.z, 
+      'w': location.pose.orientation.w,
+    }
+  }

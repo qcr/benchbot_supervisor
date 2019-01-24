@@ -4,7 +4,7 @@
   "routes": {
       "image": {
           "get": {
-              "topic": "/camera_front/color/image_raw",
+              "topic": "/camera/image_raw",
               "topic_type": "sensor_msgs/Image",
               "fields": {
                   "data": {

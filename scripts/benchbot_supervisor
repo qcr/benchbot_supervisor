@@ -274,68 +274,6 @@ class Supervisor(object):
       except Exception as e:
         print(str(e))
 
-    @app1.route('/locations', methods=['GET'])
-    # pylint: disable=unused-variable
-    def locations():
-      try:
-        rospy.wait_for_service('/navigation/get_locations')
-        get_locations = rospy.ServiceProxy('/navigation/get_locations', Locations)
-        
-        locations = []
-        for location in get_locations().result.locations:
-          if location.location_id not in self.config['locations']:
-            continue
-          
-          locations.append({
-            'id': location.location_id,
-            'position': {
-              'x': location.marker.pose.position.x, 
-              'y': location.marker.pose.position.y, 
-              'z': location.marker.pose.position.z
-            },
-            'orientation': {
-              'x': location.marker.pose.orientation.x, 
-              'y': location.marker.pose.orientation.y, 
-              'z': location.marker.pose.orientation.z, 
-              'w': location.marker.pose.orientation.w,
-            }
-          })
-
-        return jsonify(locations)
-      except Exception as e:
-        print(str(e))
-        abort(500)
-
-    @app1.route('/locations/<location_id>', methods=['GET'])
-    # pylint: disable=unused-variable
-    def location(location_id):
-      try:
-        if location_id not in self.config['locations']:
-          raise Exception('Unknown location - ' + location_id)
-
-        rospy.wait_for_service('/navigation/get_location_pose')
-        get_location = rospy.ServiceProxy('/navigation/get_location_pose', LocationPose)
-
-        location = get_location(location_id)
-        
-        return jsonify({
-          'id': location_id,
-          'position': {
-            'x': location.pose.position.x, 
-            'y': location.pose.position.y, 
-            'z': location.pose.position.z
-          },
-          'orientation': {
-            'x': location.pose.orientation.x, 
-            'y': location.pose.orientation.y, 
-            'z': location.pose.orientation.z, 
-            'w': location.pose.orientation.w,
-          }
-        })
-      except Exception as e:
-        print('Error <location>:', str(e))
-        abort(500)
-
     @app1.route('/complete', methods=['POST'])
     # pylint: disable=unused-variable
     def complete():
