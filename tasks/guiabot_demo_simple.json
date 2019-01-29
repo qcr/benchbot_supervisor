@@ -71,7 +71,7 @@
   "objectives": {
       "main": {
           "callback": "simple/equals",
-          "expected": "location_1"
+          "expected": "location_3"
       }
   }
 }
