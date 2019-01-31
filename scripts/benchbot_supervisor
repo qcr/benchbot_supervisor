@@ -246,6 +246,14 @@ class Supervisor(object):
     app2 = Flask(__name__) # Interface to web UI
     import traceback
 
+    @app1.route('/', methods=['GET'])
+    # pylint: disable=unused-variable
+    def main():
+      return jsonify({
+          'get': [self.config['routes'][route]['name'] if 'name' in self.config['routes'][route] else route for route in self.config['routes'] if 'get' in self.config['routes'][route]], 
+          'send': [self.config['routes'][route]['name'] if 'name' in self.config['routes'][route] else route for route in self.config['routes'] if 'post' in self.config['routes'][route]]
+      })
+
     @app1.route('/<route>', methods=['GET'])
     # pylint: disable=unused-variable
     def get(route):
