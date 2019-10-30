@@ -1,0 +1,18 @@
+cmd_vel:
+  connection: "api_to_ros"
+  ros_topic: "/cmd_vel"
+  ros_type: "geometry_msgs/TwistStamped"
+debug_move:
+  connection: "api_to_ros"
+  ros_topic: "/cmd_vel"
+  ros_type: "geometry_msgs/TwistStamped"
+debug_image:
+  connection: "ros_to_api"
+  ros_topic: "/usb_cam/image_raw"
+  ros_type: "sensor_msgs/Image"
+  callback_supervisor: "supervisor_callbacks.encode_ros_image"
+  callback_api: "api_callbacks.decode_ros_image"
+image_rgb:
+  connection: "ros_to_api"
+  ros_topic: "/camera_front/color/image_raw"
+  ros_type: "sensor_msgs/Image"
