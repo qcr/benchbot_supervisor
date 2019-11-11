@@ -75,7 +75,7 @@ class Supervisor(object):
 
     def __init__(self, port=_SUPERVISOR_PORT):
         # Configuration parameters
-        self.supervisor_address = 'http://localhost:' + str(port)
+        self.supervisor_address = 'http://0.0.0.0:' + str(port)
         self.task_file = None
         self.task_name = None
         self.robot_file = None
