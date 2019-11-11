@@ -18,13 +18,15 @@ laser:
   callback_api: "api_callbacks.decode_jsonpickle"
 move_angle:
   connection: "api_to_ros"
-  ros_topic: "/navigate_cmd"
-  ros_type: "std_msgs/String"
+  ros_topic: "/cmd_vel"
+  ros_type: "geometry_msgs/Twist"
+  callback_supervisor: "supervisor_callbacks.move_angle"
 move_distance:
   connection: "api_to_ros"
-  ros_topic: "/navigate_cmd"
-  ros_type: "std_msgs/String"
+  ros_topic: "/cmd_vel"
+  ros_type: "geometry_msgs/Twist"
+  callback_supervisor: "supervisor_callbacks.move_distance"
 move_next:
   connection: "api_to_ros"
-  ros_topic: "/navigate_cmd"
-  ros_type: "std_msgs/String"
+  ros_topic: "/cmd_vel"
+  ros_type: "geometry_msgs/Twist"

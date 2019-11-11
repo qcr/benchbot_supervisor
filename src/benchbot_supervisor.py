@@ -10,6 +10,7 @@ import re
 import rospkg
 import rospy
 import signal
+import tf2_ros
 import threading
 import yaml
 
@@ -86,6 +87,9 @@ class Supervisor(object):
 
         # Current state
         self.connections = {}
+        self.state = {}
+        self.tf_buffer = tf2_ros.Buffer()
+        self._tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
         # Configure the Supervisor with provided arguments
         self.configure(
@@ -111,6 +115,9 @@ class Supervisor(object):
 
     def _call_connection(self, connection_name, data=None):
         if self.connections[connection_name]['type'] == CONN_ROS_TO_API:
+            # Overwrite the data because it is an observation (data should be
+            # none anyway with an observation as we do not 'parametrise' an
+            # observation)
             self.connections[connection_name]['condition'].acquire()
             data = deepcopy(self.connections[connection_name]['data'])
             self.connections[connection_name]['condition'].release()
@@ -118,7 +125,13 @@ class Supervisor(object):
             return (data
                     if self.connections[connection_name]['callback'] is None or
                     data is None else
-                    self.connections[connection_name]['callback'](data))
+                    self.connections[connection_name]['callback'](data, self))
+        elif self.connections[connection_name]['type'] == CONN_API_TO_ROS:
+            if self.connections[connection_name]['callback'] is None:
+                self.connections[connection_name]['ros'].publish(data)
+            else:
+                self.connections[connection_name]['callback'](
+                    data, self.connections[connection_name]['ros'], self)
         else:
             print("UNIMPLEMENTED CONNECTION CALL: %s" %
                   self.connections[connection_name]['type'])
@@ -169,6 +182,9 @@ class Supervisor(object):
             self.connections[connection_name]['ros'] = rospy.Subscriber(
                 connection_data['ros_topic'], topic_class,
                 self._generate_subscriber_callback(connection_name))
+        elif connection_data['connection'] == CONN_API_TO_ROS:
+            self.connections[connection_name]['ros'] = rospy.Publisher(
+                connection_data['ros_topic'], topic_class, queue_size=1)
         else:
             print("UNIMPLEMENTED POST CONNECTION: %s" %
                   connection_data['connection'])
@@ -238,9 +254,8 @@ class Supervisor(object):
                 rospy.logerr("Requested non-existent config: %s" % config)
                 flask.abort(404)
 
-        @supervisor_flask.route('/connections/<connection>',
-                                methods=['GET', 'POST'])
-        def __connection(connection):
+        @supervisor_flask.route('/connections/<connection>', methods=['GET'])
+        def __connection_get(connection):
             # TODO there needs to be better error checking for when no message
             # has been received on a ROS topic!!! (at the moment all we get is
             # an unhelpful null & success...)
@@ -251,7 +266,9 @@ class Supervisor(object):
             try:
                 return flask.jsonify(
                     _to_simple_dict(
-                        self._call_connection(connection, data=None)))
+                        self._call_connection(
+                            connection,
+                            data=flask.request.get_json(silent=True))))
             except Exception as e:
                 rospy.logerr("Supervisor failed on processing connection "
                              "'%s' with error:\n%s" % (connection, repr(e)))
