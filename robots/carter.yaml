@@ -1,18 +1,30 @@
-cmd_vel:
-  connection: "api_to_ros"
-  ros_topic: "/cmd_vel"
-  ros_type: "geometry_msgs/TwistStamped"
-debug_move:
-  connection: "api_to_ros"
-  ros_topic: "/cmd_vel"
-  ros_type: "geometry_msgs/TwistStamped"
-debug_image:
+image_depth:
   connection: "ros_to_api"
-  ros_topic: "/usb_cam/image_raw"
+  ros_topic: "/camera/depth/image_raw"
   ros_type: "sensor_msgs/Image"
-  callback_supervisor: "supervisor_callbacks.encode_ros_image"
-  callback_api: "api_callbacks.decode_ros_image"
+  callback_supervisor: "supervisor_callbacks.encode_depth_image"
+  callback_api: "api_callbacks.decode_jsonpickle"
 image_rgb:
   connection: "ros_to_api"
-  ros_topic: "/camera_front/color/image_raw"
+  ros_topic: "/camera/color/image_raw"
   ros_type: "sensor_msgs/Image"
+  callback_supervisor: "supervisor_callbacks.encode_color_image"
+  callback_api: "api_callbacks.decode_color_image"
+laser:
+  connection: "ros_to_api"
+  ros_topic: "/scan_laser"
+  ros_type: "sensor_msgs/LaserScan"
+  callback_supervisor: "supervisor_callbacks.encode_laserscan"
+  callback_api: "api_callbacks.decode_jsonpickle"
+move_angle:
+  connection: "api_to_ros"
+  ros_topic: "/navigate_cmd"
+  ros_type: "std_msgs/String"
+move_distance:
+  connection: "api_to_ros"
+  ros_topic: "/navigate_cmd"
+  ros_type: "std_msgs/String"
+move_next:
+  connection: "api_to_ros"
+  ros_topic: "/navigate_cmd"
+  ros_type: "std_msgs/String"

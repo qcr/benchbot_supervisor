@@ -1,2 +1,4 @@
 flask
 gevent
+jsonpickle
+numpy

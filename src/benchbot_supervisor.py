@@ -241,6 +241,9 @@ class Supervisor(object):
         @supervisor_flask.route('/connections/<connection>',
                                 methods=['GET', 'POST'])
         def __connection(connection):
+            # TODO there needs to be better error checking for when no message
+            # has been received on a ROS topic!!! (at the moment all we get is
+            # an unhelpful null & success...)
             if connection not in self.connections:
                 rospy.logerr("Requested non-existent connection: %s" %
                              connection)
