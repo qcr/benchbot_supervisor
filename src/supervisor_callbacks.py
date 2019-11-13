@@ -112,10 +112,12 @@ def move_distance(data, publisher, supervisor):
     vel_msg = Twist(linear=Vector3(x=np.sign(distance) * _MOVE_DISTANCE_SPEED))
     hz_rate = rospy.Rate(_MOVE_HZ)
     try:
+        # This is relatively gross code at this stage...
         start = current_pose(data, supervisor)
         current = start
-        while (t3.affines.decompose(__pose_diff_matrices(start, current))[0][0]
-               < distance):
+        positive = (1 if distance >= 0 else -1)
+        while (positive * (distance - t3.affines.decompose(
+                __pose_diff_matrices(start, current))[0][0]) > 0):
             publisher.publish(vel_msg)
             hz_rate.sleep()
             current = current_pose(data, supervisor)
