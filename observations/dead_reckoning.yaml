@@ -1,1 +1,1 @@
-["image_rgb"]
+["image_depth", "image_rgb", "laser", "poses"]

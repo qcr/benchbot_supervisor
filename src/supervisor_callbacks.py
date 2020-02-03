@@ -25,7 +25,7 @@ def __safe_dict_get(d, key, default):
 
 
 def __transform_stamped_to_matrix(tfs):
-    # FFS ROS... how do you still not have a method for this in 2019...
+    # FFS ROS... how do you still not have a method for this in 2020...
     return t3.affines.compose([
         tfs.transform.translation.x, tfs.transform.translation.y,
         tfs.transform.translation.z
@@ -75,9 +75,12 @@ def encode_laserscan(data, supervisor):
     })
 
 
-def encode_pose(data, supervisor):
-    # TODO
-    pass
+def form_pose_tree(data, supervisor):
+    # TODO REMOVE HARDCODED TREE STRUCTURE!!!
+
+    rospy.logwarn("Forming pose tree from:")
+    for k, v in data.items():
+        rospy.logwarn("%s: %s" % (k, v))
 
 
 def move_angle(data, publisher, supervisor):

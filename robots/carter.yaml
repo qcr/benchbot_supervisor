@@ -30,3 +30,9 @@ move_next:
   connection: "api_to_ros"
   ros_topic: "/cmd_vel"
   ros_type: "geometry_msgs/Twist"
+poses:
+  connection: "roscache_to_api"
+  ros_topic: "/tf"
+  ros_type: "tf2_msgs/TFMessage"
+  callback_supervisor: "supervisor_callbacks.form_pose_tree"
+  callback_api: "api_callbacks.format_pose_tree"
