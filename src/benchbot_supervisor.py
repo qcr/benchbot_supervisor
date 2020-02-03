@@ -137,7 +137,7 @@ class Supervisor(object):
 
             return (data
                     if self.connections[connection_name]['callback_supervisor']
-                    is None or data is None else
+                    is None else
                     self.connections[connection_name]['callback_supervisor'](
                         data, self))
         elif self.connections[connection_name]['type'] == CONN_API_TO_ROS:
@@ -176,14 +176,6 @@ class Supervisor(object):
         # Pull out imported components from the connection data
         topic_class, callback_supervisor_fn, callback_caching_fn = (
             Supervisor._attempt_connection_imports(connection_data))
-        if (topic_class is None and connection_data['connection'] in [
-                CONN_API_TO_ROS, CONN_ROS_TO_API
-        ]):
-            raise ValueError(
-                "Failed to get topic class for connection '%s' from data: %s" %
-                (connection_name, connection_data))
-        print("%s: %s, %s, %s" % (connection_name, topic_class,
-                                  callback_supervisor_fn, callback_caching_fn))
 
         # Register the connection with the supervisor
         self.connections[connection_name] = {
@@ -194,18 +186,21 @@ class Supervisor(object):
             'data': None,
             'condition': threading.Condition()
         }
-        if connection_data['connection'] in [
-                CONN_ROS_TO_API, CONN_ROSCACHE_TO_API
-        ]:
-            self.connections[connection_name]['ros'] = rospy.Subscriber(
-                connection_data['ros_topic'], topic_class,
-                self._generate_subscriber_callback(connection_name))
-        elif connection_data['connection'] == CONN_API_TO_ROS:
-            self.connections[connection_name]['ros'] = rospy.Publisher(
-                connection_data['ros_topic'], topic_class, queue_size=1)
-        else:
-            print("UNIMPLEMENTED POST CONNECTION: %s" %
-                  connection_data['connection'])
+
+        # Construct connections if possible
+        if topic_class != None:
+            if connection_data['connection'] in [
+                    CONN_ROS_TO_API, CONN_ROSCACHE_TO_API
+            ]:
+                self.connections[connection_name]['ros'] = rospy.Subscriber(
+                    connection_data['ros_topic'], topic_class,
+                    self._generate_subscriber_callback(connection_name))
+            elif connection_data['connection'] == CONN_API_TO_ROS:
+                self.connections[connection_name]['ros'] = rospy.Publisher(
+                    connection_data['ros_topic'], topic_class, queue_size=1)
+            else:
+                print("UNIMPLEMENTED POST CONNECTION: %s" %
+                      connection_data['connection'])
 
     def configure(self,
                   task_file=None,
