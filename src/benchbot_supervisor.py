@@ -19,10 +19,10 @@ _PACKAGE_NAME = "benchbot_supervisor"
 _SUPERVISOR_PORT = 10000
 
 CONN_API_TO_ROS = 'api_to_ros'
-CONN_API_TO_SUP = 'api_to_supervisor'
 CONN_ROS_TO_API = 'ros_to_api'
+CONN_ROSCACHE_TO_API = 'roscache_to_api'
 
-CONNS = [CONN_API_TO_ROS, CONN_API_TO_SUP, CONN_ROS_TO_API]
+CONNS = [CONN_API_TO_ROS, CONN_ROS_TO_API, CONN_ROSCACHE_TO_API]
 
 
 def _merge_dicts(dict_1, dict_2):
@@ -107,30 +107,44 @@ class Supervisor(object):
             x = connection_data['ros_type'].split('/')
             topic_class = getattr(importlib.import_module(x[0] + '.msg'), x[1])
 
-        callback_fn = None
+        callback_supervisor_fn = None
         if 'callback_supervisor' in connection_data:
-            x = connection_data['callback_supervisor'].rsplit('.', 1)
-            callback_fn = getattr(importlib.import_module(x[0]), x[1])
-        return (topic_class, callback_fn)
+            callback_supervisor_fn = Supervisor._dynamic_callback_import(
+                connection_data['callback_supervisor'])
+
+        callback_caching_fn = None
+        if 'callback_caching' in connection_data:
+            callback_caching_fn = Supervisor._dynamic_callback_import(
+                connection_data['callback_caching'])
+
+        return (topic_class, callback_supervisor_fn, callback_caching_fn)
+
+    @staticmethod
+    def _dynamic_callback_import(callback_string):
+        x = callback_string.rsplit('.', 1)
+        return getattr(importlib.import_module(x[0]), x[1])
 
     def _call_connection(self, connection_name, data=None):
-        if self.connections[connection_name]['type'] == CONN_ROS_TO_API:
+        if (self.connections[connection_name]['type'] in [
+                CONN_ROS_TO_API, CONN_ROSCACHE_TO_API
+        ]):
             # Overwrite the data because it is an observation (data should be
-            # none anyway with an observation as we do not 'parametrise' an
+            # none anyway with an observation as we do not 'parameterise' an
             # observation)
             self.connections[connection_name]['condition'].acquire()
             data = deepcopy(self.connections[connection_name]['data'])
             self.connections[connection_name]['condition'].release()
 
             return (data
-                    if self.connections[connection_name]['callback'] is None or
-                    data is None else
-                    self.connections[connection_name]['callback'](data, self))
+                    if self.connections[connection_name]['callback_supervisor']
+                    is None else
+                    self.connections[connection_name]['callback_supervisor'](
+                        data, self))
         elif self.connections[connection_name]['type'] == CONN_API_TO_ROS:
-            if self.connections[connection_name]['callback'] is None:
+            if self.connections[connection_name]['callback_supervisor'] is None:
                 self.connections[connection_name]['ros'].publish(data)
             else:
-                self.connections[connection_name]['callback'](
+                self.connections[connection_name]['callback_supervisor'](
                     data, self.connections[connection_name]['ros'], self)
         else:
             print("UNIMPLEMENTED CONNECTION CALL: %s" %
@@ -139,6 +153,10 @@ class Supervisor(object):
     def _generate_subscriber_callback(self, connection_name):
 
         def __cb(data):
+            if (self.connections[connection_name]['type'] ==
+                    CONN_ROSCACHE_TO_API):
+                data = self.connections[connection_name]['callback_caching'](
+                    data, self.connections[connection_name]['data'])
             self.connections[connection_name]['condition'].acquire()
             self.connections[connection_name]['data'] = data
             self.connections[connection_name]['condition'].notify()
@@ -156,38 +174,33 @@ class Supervisor(object):
 
     def _register_connection(self, connection_name, connection_data):
         # Pull out imported components from the connection data
-        topic_class, callback_fn = Supervisor._attempt_connection_imports(
-            connection_data)
-        if (topic_class is None and connection_data['connection'] in [
-                CONN_API_TO_ROS, CONN_ROS_TO_API
-        ]):
-            raise ValueError(
-                "Failed to get topic class for connection '%s' from data: %s" %
-                (connection_name, connection_data))
-        if (callback_fn is None and
-                connection_data['connection'] == CONN_API_TO_SUP):
-            raise ValueError(
-                "Failed to get callback_fn for connection '%s' from data: %s" %
-                (connection_name, connection_data))
+        topic_class, callback_supervisor_fn, callback_caching_fn = (
+            Supervisor._attempt_connection_imports(connection_data))
 
         # Register the connection with the supervisor
         self.connections[connection_name] = {
             'type': connection_data['connection'],
-            'callback': callback_fn,
+            'callback_supervisor': callback_supervisor_fn,
+            'callback_caching': callback_caching_fn,
             'ros': None,
             'data': None,
             'condition': threading.Condition()
         }
-        if connection_data['connection'] == CONN_ROS_TO_API:
-            self.connections[connection_name]['ros'] = rospy.Subscriber(
-                connection_data['ros_topic'], topic_class,
-                self._generate_subscriber_callback(connection_name))
-        elif connection_data['connection'] == CONN_API_TO_ROS:
-            self.connections[connection_name]['ros'] = rospy.Publisher(
-                connection_data['ros_topic'], topic_class, queue_size=1)
-        else:
-            print("UNIMPLEMENTED POST CONNECTION: %s" %
-                  connection_data['connection'])
+
+        # Construct connections if possible
+        if topic_class != None:
+            if connection_data['connection'] in [
+                    CONN_ROS_TO_API, CONN_ROSCACHE_TO_API
+            ]:
+                self.connections[connection_name]['ros'] = rospy.Subscriber(
+                    connection_data['ros_topic'], topic_class,
+                    self._generate_subscriber_callback(connection_name))
+            elif connection_data['connection'] == CONN_API_TO_ROS:
+                self.connections[connection_name]['ros'] = rospy.Publisher(
+                    connection_data['ros_topic'], topic_class, queue_size=1)
+            else:
+                print("UNIMPLEMENTED POST CONNECTION: %s" %
+                      connection_data['connection'])
 
     def configure(self,
                   task_file=None,

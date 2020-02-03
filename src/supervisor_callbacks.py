@@ -25,7 +25,7 @@ def __safe_dict_get(d, key, default):
 
 
 def __transform_stamped_to_matrix(tfs):
-    # FFS ROS... how do you still not have a method for this in 2019...
+    # FFS ROS... how do you still not have a method for this in 2020...
     return t3.affines.compose([
         tfs.transform.translation.x, tfs.transform.translation.y,
         tfs.transform.translation.z
@@ -41,6 +41,29 @@ def __transform_stamped_to_matrix(tfs):
 def __pose_diff_matrices(pose_1, pose_2):
     # Returns pose_2 - pose_1
     return np.matmul(np.linalg.inv(pose_1), pose_2)
+
+
+def create_pose_list(data, supervisor):
+    # TODO REMOVE HARDCODED TREE STRUCTURE!!!
+    # TODO REMOVE HACK FOR FIXING CAMERA NAME!!!
+    HARDCODED_POSES = ['odom', 'robot', 'left_camera', 'lidar']
+    tfs = {
+        p: __transform_stamped_to_matrix(
+            supervisor.tf_buffer.lookup_transform('map', p, rospy.Time()))
+        for p in HARDCODED_POSES
+    }
+    return jsonpickle.encode({
+        'camera' if 'camera' in k else k: {
+            'parent_frame':
+                'map',
+            'translation_xyz':
+                t3.affines.decompose(v)[0],
+            'rotation_rpy':
+                t3.taitbryan.mat2euler(t3.affines.decompose(v)[1]),
+            'rotation_wxyz':
+                t3.quaternions.mat2quat(t3.affines.decompose(v)[1])
+        } for k, v in tfs.items()
+    })
 
 
 def current_pose(data, supervisor):
@@ -73,11 +96,6 @@ def encode_laserscan(data, supervisor):
         'range_max':
             data.range_max
     })
-
-
-def encode_pose(data, supervisor):
-    # TODO
-    pass
 
 
 def move_angle(data, publisher, supervisor):
