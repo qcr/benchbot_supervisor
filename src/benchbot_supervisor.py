@@ -68,7 +68,7 @@ def _to_simple_dict(data):
 class Supervisor(object):
     _BLANK_CONFIG = {
         'actions': [],
-        'environment': [],
+        'environment_name': [],
         'observations': [],
         'robot': {},
         'task_name': ''
@@ -98,7 +98,7 @@ class Supervisor(object):
             robot_file=rospy.get_param("~robot_file", None),
             actions_file=rospy.get_param("~actions_file", None),
             observations_file=rospy.get_param("~observations_file", None),
-            environment_file=rospy.get_param("~environment_file", None))
+            environment_name=rospy.get_param("~environment_name", None))
 
     @staticmethod
     def _attempt_connection_imports(connection_data):
@@ -208,13 +208,13 @@ class Supervisor(object):
                   robot_file=None,
                   actions_file=None,
                   observations_file=None,
-                  environment_file=None):
+                  environment_name=None):
         self.task_file = task_file
         self.task_name = task_name
         self.robot_file = robot_file
         self.actions_file = actions_file
         self.observations_file = observations_file
-        self.environment_file = environment_file
+        self.environment_name = environment_name
         self.load()
 
         print("Starting a supervisor with the following configuration:\n")
@@ -227,12 +227,13 @@ class Supervisor(object):
         # task_file
         self.config = self._BLANK_CONFIG.copy()
         for k in [
-                'task_file', 'robot_file', 'actions_file', 'observations_file',
-                'environment_file'
+                'task_file', 'robot_file', 'actions_file', 'observations_file'
         ]:
             self._load_config_from_file(k)
         if self.task_name is not None:
             self.config['task_name'] = self.task_name
+        if self.environment_name is not None:
+            self.config['environment_name'] = self.environment_name
 
         # Validate that we can satisfy all action & observation requests
         for x in self.config['actions'] + self.config['observations']:
