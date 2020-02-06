@@ -5,7 +5,7 @@ import jsonpickle.ext.numpy as jet
 import numpy as np
 import ros_numpy
 import rospy
-import transforms3d as t3
+from scipy.spatial.transform import Rotation as Rot
 
 from geometry_msgs.msg import Twist, Vector3
 
@@ -26,16 +26,16 @@ def __safe_dict_get(d, key, default):
 
 def __transform_stamped_to_matrix(tfs):
     # FFS ROS... how do you still not have a method for this in 2020...
-    return t3.affines.compose([
-        tfs.transform.translation.x, tfs.transform.translation.y,
-        tfs.transform.translation.z
-    ],
-                              t3.quaternions.quat2mat([
-                                  tfs.transform.rotation.w,
-                                  tfs.transform.rotation.x,
-                                  tfs.transform.rotation.y,
-                                  tfs.transform.rotation.z
-                              ]), [1, 1, 1])
+    t_mat = np.array([tfs.transform.translation.x, 
+                      tfs.transform.translation.y,
+                      tfs.transform.translation.z]).reshape(3,1)
+    rot_obj = Rot.from_quat([tfs.transform.rotation.x,
+                             tfs.transform.rotation.y,
+                             tfs.transform.rotation.z,
+                             tfs.transform.rotation.w])
+    rot_mat = rot_obj.as_dcm()
+    h_mat = np.vstack((np.hstack((rot_mat, t_mat)), [0,0,0,1]))
+    return h_mat
 
 
 def __pose_diff_matrices(pose_1, pose_2):
@@ -57,11 +57,11 @@ def create_pose_list(data, supervisor):
             'parent_frame':
                 'map',
             'translation_xyz':
-                t3.affines.decompose(v)[0],
+                v[:-1, -1],
             'rotation_rpy':
-                t3.taitbryan.mat2euler(t3.affines.decompose(v)[1]),
+                Rot.from_dcm(v[:-1,:-1]).as_euler('XYZ'),
             'rotation_wxyz':
-                t3.quaternions.mat2quat(t3.affines.decompose(v)[1])
+                Rot.from_dcm(v[:-1,:-1]).as_quat()
         } for k, v in tfs.items()
     })
 
@@ -108,14 +108,15 @@ def move_angle(data, publisher, supervisor):
         # factor to make our while case consistent between +ve & -ve angles,
         # and used some wrapping to hope our flimsy sign assumptions will hold
         # for us.  Valid simplifying, or bug introduction? Time will tell...
+        # Even messier using replacement for t3
         start = current_pose(data, supervisor)
         current = start
         positive = (1 if angle >= 0 else -1)  # Yes, gross way to handle -ves
         print("Moving to angle %f (hack factor: %d)" % (angle, positive))
         print("Moved angle is: %f" %
-              t3.euler.mat2euler(__pose_diff_matrices(start, current))[2])
-        while (positive * __pi_wrap(angle - t3.euler.mat2euler(
-                __pose_diff_matrices(start, current))[2]) > 0):
+              Rot.from_dcm(__pose_diff_matrices(start, current)[:-1,:-1]).as_euler('XYZ')[2])
+        while (positive * __pi_wrap(angle - Rot.from_dcm(
+                __pose_diff_matrices(start, current)[:-1,:-1]).as_euler('XYZ')[2]) > 0):
             publisher.publish(vel_msg)
             hz_rate.sleep()
             current = current_pose(data, supervisor)
@@ -134,8 +135,7 @@ def move_distance(data, publisher, supervisor):
         start = current_pose(data, supervisor)
         current = start
         positive = (1 if distance >= 0 else -1)
-        while (positive * (distance - t3.affines.decompose(
-                __pose_diff_matrices(start, current))[0][0]) > 0):
+        while (positive * (distance - __pose_diff_matrices(start, current)[0,-1]) > 0):
             publisher.publish(vel_msg)
             hz_rate.sleep()
             current = current_pose(data, supervisor)
