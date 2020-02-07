@@ -60,7 +60,7 @@ def create_pose_list(data, supervisor):
                 v[:-1, -1],
             'rotation_rpy':
                 Rot.from_dcm(v[:-1,:-1]).as_euler('XYZ'),
-            'rotation_wxyz':
+            'rotation_xyzw':
                 Rot.from_dcm(v[:-1,:-1]).as_quat()
         } for k, v in tfs.items()
     })
