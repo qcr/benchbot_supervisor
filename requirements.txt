@@ -2,4 +2,4 @@ flask
 gevent
 jsonpickle
 numpy
-transforms3d
+scipy
