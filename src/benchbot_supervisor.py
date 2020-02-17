@@ -10,6 +10,7 @@ import re
 import rospkg
 import rospy
 import signal
+import traceback
 import tf2_ros
 import threading
 import yaml
@@ -293,6 +294,7 @@ class Supervisor(object):
             except Exception as e:
                 rospy.logerr("Supervisor failed on processing connection "
                              "'%s' with error:\n%s" % (connection, repr(e)))
+                traceback.print_exc()
                 flask.abort(500)
 
         # Configure our server

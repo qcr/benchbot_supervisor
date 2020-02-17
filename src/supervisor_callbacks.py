@@ -11,36 +11,65 @@ from geometry_msgs.msg import Twist, Vector3
 
 jet.register_handlers()
 
+_MOVE_HZ = 20
+
 _MOVE_ANGLE_SPEED = 0.5
 _MOVE_DISTANCE_SPEED = 0.5
-_MOVE_HZ = 20
+
+_MOVE_NEXT_TOL_DIST = 0.1
+_MOVE_NEXT_TOL_YAW = 30 * np.pi / 180.0
+_MOVE_NEXT_K_DIST = 2.5
+_MOVE_NEXT_K_DIRECTION = 7.5
+_MOVE_NEXT_K_UMMM = -5
+
+
+def __ang_to_b_wrt_a(matrix_a, matrix_b):
+    # Computes the 2D angle to the location of homogenous transformation matrix
+    # b, wrt a
+    diff = __tr_b_wrt_a(matrix_a, matrix_b)
+    return np.arctan2(diff[1, 3], diff[0, 3])
+
+
+def __dist_from_a_to_b(matrix_a, matrix_b):
+    # Computes 2D distance from homogenous transformation matrix a to b
+    return np.linalg.norm(__tr_b_wrt_a(matrix_a, matrix_b)[0:2, 3])
 
 
 def __pi_wrap(angle):
     return np.mod(angle + np.pi, 2 * np.pi) - np.pi
 
 
+def __pose_vector_to_tf_matrix(pv):
+    # Expected format is [x,y,z,w,X,Y,Z] (to match how they have been dumped
+    # into the environment metadata files)
+    return np.vstack((np.hstack((Rot.from_quat(pv[0:4]).as_dcm(),
+                                 np.array(pv[4:]).reshape(3,
+                                                          1))), [0, 0, 0, 1]))
+
+
 def __safe_dict_get(d, key, default):
     return d[key] if type(d) is dict and key in d else default
 
 
-def __transform_stamped_to_matrix(tfs):
+def __tf_ros_stamped_to_tf_matrix(tfs):
     # FFS ROS... how do you still not have a method for this in 2020...
-    t_mat = np.array([tfs.transform.translation.x, 
-                      tfs.transform.translation.y,
-                      tfs.transform.translation.z]).reshape(3,1)
-    rot_obj = Rot.from_quat([tfs.transform.rotation.x,
-                             tfs.transform.rotation.y,
-                             tfs.transform.rotation.z,
-                             tfs.transform.rotation.w])
-    rot_mat = rot_obj.as_dcm()
-    h_mat = np.vstack((np.hstack((rot_mat, t_mat)), [0,0,0,1]))
-    return h_mat
+    return __pose_vector_to_tf_matrix([
+        tfs.transform.rotation.x, tfs.transform.rotation.y,
+        tfs.transform.rotation.z, tfs.transform.rotation.w,
+        tfs.transform.translation.x, tfs.transform.translation.y,
+        tfs.transform.translation.z
+    ])
 
 
-def __pose_diff_matrices(pose_1, pose_2):
-    # Returns pose_2 - pose_1
-    return np.matmul(np.linalg.inv(pose_1), pose_2)
+def __tr_b_wrt_a(matrix_a, matrix_b):
+    # Computes matrix_b - matrix_a (transform b wrt to transform a)
+    return np.matmul(np.linalg.inv(matrix_a), matrix_b)
+
+
+def __yaw_b_wrt_a(matrix_a, matrix_b):
+    # Computes the yaw diff of homogenous transformation matrix b w.r.t. a
+    return Rot.as_rotvec(
+        Rot.from_dcm(__tr_b_wrt_a(matrix_a, matrix_b)[0:3, 0:3]))[2]
 
 
 def create_pose_list(data, supervisor):
@@ -48,27 +77,23 @@ def create_pose_list(data, supervisor):
     # TODO REMOVE HACK FOR FIXING CAMERA NAME!!!
     HARDCODED_POSES = ['odom', 'robot', 'left_camera', 'lidar']
     tfs = {
-        p: __transform_stamped_to_matrix(
+        p: __tf_ros_stamped_to_tf_matrix(
             supervisor.tf_buffer.lookup_transform('map', p, rospy.Time()))
         for p in HARDCODED_POSES
     }
     return jsonpickle.encode({
         'camera' if 'camera' in k else k: {
-            'parent_frame':
-                'map',
-            'translation_xyz':
-                v[:-1, -1],
-            'rotation_rpy':
-                Rot.from_dcm(v[:-1,:-1]).as_euler('XYZ'),
-            'rotation_xyzw':
-                Rot.from_dcm(v[:-1,:-1]).as_quat()
+            'parent_frame': 'map',
+            'translation_xyz': v[:-1, -1],
+            'rotation_rpy': Rot.from_dcm(v[:-1, :-1]).as_euler('XYZ'),
+            'rotation_xyzw': Rot.from_dcm(v[:-1, :-1]).as_quat()
         } for k, v in tfs.items()
     })
 
 
 def current_pose(data, supervisor):
     # TODO REMOVE HARDCODED FRAME NAMES!!!
-    return __transform_stamped_to_matrix(
+    return __tf_ros_stamped_to_tf_matrix(
         supervisor.tf_buffer.lookup_transform('map', 'robot', rospy.Time()))
 
 
@@ -112,11 +137,9 @@ def move_angle(data, publisher, supervisor):
         start = current_pose(data, supervisor)
         current = start
         positive = (1 if angle >= 0 else -1)  # Yes, gross way to handle -ves
-        print("Moving to angle %f (hack factor: %d)" % (angle, positive))
-        print("Moved angle is: %f" %
-              Rot.from_dcm(__pose_diff_matrices(start, current)[:-1,:-1]).as_euler('XYZ')[2])
         while (positive * __pi_wrap(angle - Rot.from_dcm(
-                __pose_diff_matrices(start, current)[:-1,:-1]).as_euler('XYZ')[2]) > 0):
+                __tr_b_wrt_a(start, current)[:-1, :-1]).as_euler('XYZ')[2]) >
+               0):
             publisher.publish(vel_msg)
             hz_rate.sleep()
             current = current_pose(data, supervisor)
@@ -135,10 +158,60 @@ def move_distance(data, publisher, supervisor):
         start = current_pose(data, supervisor)
         current = start
         positive = (1 if distance >= 0 else -1)
-        while (positive * (distance - __pose_diff_matrices(start, current)[0,-1]) > 0):
+        while (positive *
+               (distance - __tr_b_wrt_a(start, current)[0, -1]) > 0):
             publisher.publish(vel_msg)
             hz_rate.sleep()
             current = current_pose(data, supervisor)
     except Exception as e:
         rospy.logerr("move_distance: failed with exception '%s'" % e)
     publisher.publish(Twist())
+
+
+def move_next(data, publisher, supervisor):
+    # Configure if this is out first step
+    if 'trajectory_pose_next' not in supervisor.environment_data:
+        supervisor.environment_data['trajectory_pose_next'] = 0
+
+    # Get the goal
+    goal = __pose_vector_to_tf_matrix(
+        np.fromstring(supervisor.environment_data['trajectory_poses'][
+            supervisor.environment_data['trajectory_pose_next']].strip()[1:-1],
+                      sep=", "))
+    # rospy.logwarn("Servoing to goal: %s" % goal)
+
+    # Servo to the goal
+    vel_msg = Twist()
+    hz_rate = rospy.Rate(_MOVE_HZ)
+    while True:
+        # Get latest data
+        current = current_pose(data, supervisor)
+        goal_dist = __dist_from_a_to_b(current, goal)
+        goal_direction = __ang_to_b_wrt_a(current, goal)
+
+        # rospy.logwarn(
+        #     "Current: %s, %s" %
+        #     (Rot.as_rotvec(Rot.from_dcm(current[0:3, 0:3])), current[0:3, -1]))
+        # rospy.logwarn(
+        #     "Goal: %s, %s" %
+        #     (Rot.as_rotvec(Rot.from_dcm(goal[0:3, 0:3])), goal[0:3, -1]))
+        rospy.logwarn("Values: %f, %f" % (goal_dist, goal_direction))
+
+        # Bail if exit conditions are met
+        if (goal_dist < _MOVE_NEXT_TOL_DIST):  # and
+            # np.abs(rel_yaw) < _MOVE_NEXT_TOL_YAW):
+            break
+
+        # Construct & send velocity msg
+        vel_msg.linear.x = _MOVE_NEXT_K_DIST * goal_dist
+        vel_msg.angular.z = _MOVE_NEXT_K_DIRECTION * goal_direction  # +
+        # _MOVE_NEXT_GAIN_YAW_DIFF * BETA
+        publisher.publish(vel_msg)
+        hz_rate.sleep()
+    publisher.publish(Twist())
+
+    # Register that we completed this goal
+    supervisor.environment_data['trajectory_pose_next'] += 1
+    if (supervisor.environment_data['trajectory_pose_next'] >= len(
+            supervisor.environment_data['trajectory_poses'])):
+        rospy.logerr("You have run out of trajectory poses!")
