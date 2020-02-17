@@ -13,14 +13,13 @@ jet.register_handlers()
 
 _MOVE_HZ = 20
 
-_MOVE_ANGLE_SPEED = 0.5
-_MOVE_DISTANCE_SPEED = 0.5
+_MOVE_TOL_DIST = 0.01
+_MOVE_TOL_YAW = np.deg2rad(1)
 
-_MOVE_NEXT_TOL_DIST = 0.05
-_MOVE_NEXT_TOL_YAW = 1 * np.pi / 180.0
-_MOVE_NEXT_K_RHO = 1
-_MOVE_NEXT_K_ALPHA = 5
-_MOVE_NEXT_K_BETA = -2
+_MOVE_ANGLE_K = 3
+
+_MOVE_POINT_K_RHO = 2
+_MOVE_POINT_K_ALPHA = 5
 
 
 def __ang_to_b_wrt_a(matrix_a, matrix_b):
@@ -40,8 +39,7 @@ def __pi_wrap(angle):
 
 
 def __pose_vector_to_tf_matrix(pv):
-    # Expected format is [x,y,z,w,X,Y,Z] (to match how they have been dumped
-    # into the environment metadata files)
+    # Expected format is [x,y,z,w,X,Y,Z]
     return np.vstack((np.hstack((Rot.from_quat(pv[0:4]).as_dcm(),
                                  np.array(pv[4:]).reshape(3,
                                                           1))), [0, 0, 0, 1]))
@@ -66,10 +64,77 @@ def __tr_b_wrt_a(matrix_a, matrix_b):
     return np.matmul(np.linalg.inv(matrix_a), matrix_b)
 
 
+def __transrpy_to_tf_matrix(trans, rpy):
+    # Takes a translation vector & roll pitch yaw vector
+    return __pose_vector_to_tf_matrix(
+        np.hstack((Rot.as_quat(Rot.from_rotvec(rpy)), trans)))
+
+
 def __yaw_b_wrt_a(matrix_a, matrix_b):
     # Computes the yaw diff of homogenous transformation matrix b w.r.t. a
     return Rot.as_rotvec(
         Rot.from_dcm(__tr_b_wrt_a(matrix_a, matrix_b)[0:3, 0:3]))[2]
+
+
+def _current_pose(supervisor):
+    # TODO REMOVE HARDCODED FRAME NAMES!!!
+    return __tf_ros_stamped_to_tf_matrix(
+        supervisor.tf_buffer.lookup_transform('map', 'robot', rospy.Time()))
+
+
+def _move_to_angle(goal, publisher, supervisor):
+    # Servo until orientation matches that of the requested goal
+    vel_msg = Twist()
+    hz_rate = rospy.Rate(_MOVE_HZ)
+    while True:
+        # Get latest orientation error
+        orientation_error = __yaw_b_wrt_a(_current_pose(supervisor), goal)
+
+        # Bail if exit conditions are met
+        if np.abs(orientation_error) < _MOVE_TOL_YAW:
+            break
+
+        # Construct & send velocity msg
+        vel_msg.angular.z = _MOVE_ANGLE_K * orientation_error
+        publisher.publish(vel_msg)
+        hz_rate.sleep()
+    publisher.publish(Twist())
+
+
+def _move_to_pose(goal, publisher, supervisor):
+    # Servo to the point represented by goal, then rotate on spot to match pose
+    # NOTE: this was more feasible due to instabilities in pose servoing if
+    # poses are extremely close together (if "direction to goal" flips...
+    # angles all of a sudden have 180 degree error)
+
+    # Figure out direction
+    direction = (1 if np.abs(__ang_to_b_wrt_a(_current_pose(supervisor), goal))
+                 < np.pi else -1)
+
+    # Servo to point
+    # rho = distance from current to goal
+    # alpha = angle of goal vector in vehicle frame
+    vel_msg = Twist()
+    hz_rate = rospy.Rate(_MOVE_HZ)
+    while True:
+        # Get latest position error
+        current = _current_pose(supervisor)
+        rho = __dist_from_a_to_b(current, goal)
+        alpha = __ang_to_b_wrt_a(current, goal)
+
+        # Bail if exit conditions are met
+        if (rho < _MOVE_TOL_DIST):
+            break
+
+        # Construct & send velocity msg
+        vel_msg.linear.x = direction * _MOVE_POINT_K_RHO * rho
+        vel_msg.angular.z = direction * _MOVE_POINT_K_ALPHA * alpha
+        publisher.publish(vel_msg)
+        hz_rate.sleep()
+    publisher.publish(Twist())
+
+    # Servo to match requested orientation
+    _move_to_angle(goal, publisher, supervisor)
 
 
 def create_pose_list(data, supervisor):
@@ -89,12 +154,6 @@ def create_pose_list(data, supervisor):
             'rotation_xyzw': Rot.from_dcm(v[:-1, :-1]).as_quat()
         } for k, v in tfs.items()
     })
-
-
-def current_pose(data, supervisor):
-    # TODO REMOVE HARDCODED FRAME NAMES!!!
-    return __tf_ros_stamped_to_tf_matrix(
-        supervisor.tf_buffer.lookup_transform('map', 'robot', rospy.Time()))
 
 
 def encode_color_image(data, supervisor):
@@ -124,48 +183,24 @@ def encode_laserscan(data, supervisor):
 
 
 def move_angle(data, publisher, supervisor):
-    # TODO handle collisions
-    angle = __pi_wrap(__safe_dict_get(data, 'angle', 0))
-    vel_msg = Twist(angular=Vector3(z=np.sign(angle) * _MOVE_ANGLE_SPEED))
-    hz_rate = rospy.Rate(_MOVE_HZ)
-    try:
-        # Yes, this is pretty gross top to bottom. We have used a gross sign
-        # factor to make our while case consistent between +ve & -ve angles,
-        # and used some wrapping to hope our flimsy sign assumptions will hold
-        # for us.  Valid simplifying, or bug introduction? Time will tell...
-        # Even messier using replacement for t3
-        start = current_pose(data, supervisor)
-        current = start
-        positive = (1 if angle >= 0 else -1)  # Yes, gross way to handle -ves
-        while (positive * __pi_wrap(angle - Rot.from_dcm(
-                __tr_b_wrt_a(start, current)[:-1, :-1]).as_euler('XYZ')[2]) >
-               0):
-            publisher.publish(vel_msg)
-            hz_rate.sleep()
-            current = current_pose(data, supervisor)
-    except Exception as e:
-        rospy.logerr("move_angle: failed with exception '%s'" % e)
-    publisher.publish(Twist())
+    # Derive a corresponding goal pose & send the robot there
+    _move_to_pose(
+        np.matmul(
+            _current_pose(supervisor),
+            __transrpy_to_tf_matrix(
+                [0, 0, 0],
+                [0, 0, __pi_wrap(__safe_dict_get(data, 'angle', 0))])),
+        publisher, supervisor)
 
 
 def move_distance(data, publisher, supervisor):
-    # TODO handle collisions
-    distance = __safe_dict_get(data, 'distance', 0)
-    vel_msg = Twist(linear=Vector3(x=np.sign(distance) * _MOVE_DISTANCE_SPEED))
-    hz_rate = rospy.Rate(_MOVE_HZ)
-    try:
-        # This is relatively gross code at this stage...
-        start = current_pose(data, supervisor)
-        current = start
-        positive = (1 if distance >= 0 else -1)
-        while (positive *
-               (distance - __tr_b_wrt_a(start, current)[0, -1]) > 0):
-            publisher.publish(vel_msg)
-            hz_rate.sleep()
-            current = current_pose(data, supervisor)
-    except Exception as e:
-        rospy.logerr("move_distance: failed with exception '%s'" % e)
-    publisher.publish(Twist())
+    # Derive a corresponding goal pose & send the robot there
+    _move_to_pose(
+        np.matmul(
+            _current_pose(supervisor),
+            __transrpy_to_tf_matrix(
+                [__safe_dict_get(data, 'distance', 0), 0, 0], [0, 0, 0])),
+        publisher, supervisor)
 
 
 def move_next(data, publisher, supervisor):
@@ -173,66 +208,15 @@ def move_next(data, publisher, supervisor):
     if 'trajectory_pose_next' not in supervisor.environment_data:
         supervisor.environment_data['trajectory_pose_next'] = 0
 
-    # Get starting information before proceeding
-    goal = __pose_vector_to_tf_matrix(
-        np.fromstring(supervisor.environment_data['trajectory_poses'][
-            supervisor.environment_data['trajectory_pose_next']].strip()[1:-1],
-                      sep=", "))
-    current = current_pose(data, supervisor)
-    direction = (-1 if np.abs(__ang_to_b_wrt_a(current, goal)) > np.pi else 1)
-    rospy.logerr(
-        "CURRENT: %s, %s" %
-        (current[0:3, -1], Rot.as_rotvec(Rot.from_dcm(current[0:3, 0:3]))))
-    rospy.logerr("NEW GOAL: %s, %s" %
-                 (goal[0:3, -1], Rot.as_rotvec(Rot.from_dcm(goal[0:3, 0:3]))))
-    delta = __tr_b_wrt_a(current_pose(data, supervisor), goal)
-    rospy.logerr(
-        "DELTA GOAL: %s, %s" %
-        (delta[0:3, -1], Rot.as_rotvec(Rot.from_dcm(delta[0:3, 0:3]))))
-    rospy.logerr("DELTA GOAL:\n%s" % delta)
-    rospy.logerr("DIRECTION: %d" % direction)
-
-    # Figure out direction
-
-    # Servo to the goal
-    # rho = distance from current to goal
-    # theta = goal yaw - current yaw
-    # beta = angle of goal vector in world frame?
-    # alpha = angle of goal vector in vehicle frame
-    vel_msg = Twist()
-    hz_rate = rospy.Rate(_MOVE_HZ)
-    while True:
-        # Get latest data
-        current = current_pose(data, supervisor)
-        rho = __dist_from_a_to_b(current, goal)
-        theta = -__yaw_b_wrt_a(current, goal)
-        alpha = __ang_to_b_wrt_a(current, goal)
-        beta = -theta - alpha
-        beta = __pi_wrap(beta)
-
-        # rospy.logwarn(
-        #     "Current: %s, %s" %
-        #     (Rot.as_rotvec(Rot.from_dcm(current[0:3, 0:3])), current[0:3, -1]))
-        # rospy.logwarn(
-        #     "Goal: %s, %s" %
-        #     (Rot.as_rotvec(Rot.from_dcm(goal[0:3, 0:3])), goal[0:3, -1]))
-        rospy.logwarn(
-            "Rho: %f, Alpha: %f, Beta: %f, th: %f" %
-            (rho, np.rad2deg(alpha), np.rad2deg(beta), np.rad2deg(theta)))
-
-        # Bail if exit conditions are met
-        if (rho < _MOVE_NEXT_TOL_DIST and np.abs(theta) < _MOVE_NEXT_TOL_YAW):
-            break
-        elif (rho < 0.01):
-            break
-
-        # Construct & send velocity msg
-        vel_msg.linear.x = direction * _MOVE_NEXT_K_RHO * rho
-        vel_msg.angular.z = direction * (_MOVE_NEXT_K_ALPHA * alpha +
-                                         _MOVE_NEXT_K_BETA * beta)
-        publisher.publish(vel_msg)
-        hz_rate.sleep()
-    publisher.publish(Twist())
+    # Servo to the goal pose
+    _move_to_pose(
+        __pose_vector_to_tf_matrix(
+            np.take(
+                np.fromstring(supervisor.environment_data['trajectory_poses'][
+                    supervisor.environment_data['trajectory_pose_next']].strip(
+                    )[1:-1],
+                              sep=", "), [1, 2, 3, 0, 4, 5, 6])), publisher,
+        supervisor)
 
     # Register that we completed this goal
     supervisor.environment_data['trajectory_pose_next'] += 1
