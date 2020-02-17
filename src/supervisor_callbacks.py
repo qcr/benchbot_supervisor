@@ -16,11 +16,11 @@ _MOVE_HZ = 20
 _MOVE_ANGLE_SPEED = 0.5
 _MOVE_DISTANCE_SPEED = 0.5
 
-_MOVE_NEXT_TOL_DIST = 0.1
-_MOVE_NEXT_TOL_YAW = 30 * np.pi / 180.0
-_MOVE_NEXT_K_DIST = 2.5
-_MOVE_NEXT_K_DIRECTION = 7.5
-_MOVE_NEXT_K_UMMM = -5
+_MOVE_NEXT_TOL_DIST = 0.05
+_MOVE_NEXT_TOL_YAW = 1 * np.pi / 180.0
+_MOVE_NEXT_K_RHO = 1
+_MOVE_NEXT_K_ALPHA = 5
+_MOVE_NEXT_K_BETA = -2
 
 
 def __ang_to_b_wrt_a(matrix_a, matrix_b):
@@ -173,21 +173,42 @@ def move_next(data, publisher, supervisor):
     if 'trajectory_pose_next' not in supervisor.environment_data:
         supervisor.environment_data['trajectory_pose_next'] = 0
 
-    # Get the goal
+    # Get starting information before proceeding
     goal = __pose_vector_to_tf_matrix(
         np.fromstring(supervisor.environment_data['trajectory_poses'][
             supervisor.environment_data['trajectory_pose_next']].strip()[1:-1],
                       sep=", "))
-    # rospy.logwarn("Servoing to goal: %s" % goal)
+    current = current_pose(data, supervisor)
+    direction = (-1 if np.abs(__ang_to_b_wrt_a(current, goal)) > np.pi else 1)
+    rospy.logerr(
+        "CURRENT: %s, %s" %
+        (current[0:3, -1], Rot.as_rotvec(Rot.from_dcm(current[0:3, 0:3]))))
+    rospy.logerr("NEW GOAL: %s, %s" %
+                 (goal[0:3, -1], Rot.as_rotvec(Rot.from_dcm(goal[0:3, 0:3]))))
+    delta = __tr_b_wrt_a(current_pose(data, supervisor), goal)
+    rospy.logerr(
+        "DELTA GOAL: %s, %s" %
+        (delta[0:3, -1], Rot.as_rotvec(Rot.from_dcm(delta[0:3, 0:3]))))
+    rospy.logerr("DELTA GOAL:\n%s" % delta)
+    rospy.logerr("DIRECTION: %d" % direction)
+
+    # Figure out direction
 
     # Servo to the goal
+    # rho = distance from current to goal
+    # theta = goal yaw - current yaw
+    # beta = angle of goal vector in world frame?
+    # alpha = angle of goal vector in vehicle frame
     vel_msg = Twist()
     hz_rate = rospy.Rate(_MOVE_HZ)
     while True:
         # Get latest data
         current = current_pose(data, supervisor)
-        goal_dist = __dist_from_a_to_b(current, goal)
-        goal_direction = __ang_to_b_wrt_a(current, goal)
+        rho = __dist_from_a_to_b(current, goal)
+        theta = -__yaw_b_wrt_a(current, goal)
+        alpha = __ang_to_b_wrt_a(current, goal)
+        beta = -theta - alpha
+        beta = __pi_wrap(beta)
 
         # rospy.logwarn(
         #     "Current: %s, %s" %
@@ -195,17 +216,20 @@ def move_next(data, publisher, supervisor):
         # rospy.logwarn(
         #     "Goal: %s, %s" %
         #     (Rot.as_rotvec(Rot.from_dcm(goal[0:3, 0:3])), goal[0:3, -1]))
-        rospy.logwarn("Values: %f, %f" % (goal_dist, goal_direction))
+        rospy.logwarn(
+            "Rho: %f, Alpha: %f, Beta: %f, th: %f" %
+            (rho, np.rad2deg(alpha), np.rad2deg(beta), np.rad2deg(theta)))
 
         # Bail if exit conditions are met
-        if (goal_dist < _MOVE_NEXT_TOL_DIST):  # and
-            # np.abs(rel_yaw) < _MOVE_NEXT_TOL_YAW):
+        if (rho < _MOVE_NEXT_TOL_DIST and np.abs(theta) < _MOVE_NEXT_TOL_YAW):
+            break
+        elif (rho < 0.01):
             break
 
         # Construct & send velocity msg
-        vel_msg.linear.x = _MOVE_NEXT_K_DIST * goal_dist
-        vel_msg.angular.z = _MOVE_NEXT_K_DIRECTION * goal_direction  # +
-        # _MOVE_NEXT_GAIN_YAW_DIFF * BETA
+        vel_msg.linear.x = direction * _MOVE_NEXT_K_RHO * rho
+        vel_msg.angular.z = direction * (_MOVE_NEXT_K_ALPHA * alpha +
+                                         _MOVE_NEXT_K_BETA * beta)
         publisher.publish(vel_msg)
         hz_rate.sleep()
     publisher.publish(Twist())
