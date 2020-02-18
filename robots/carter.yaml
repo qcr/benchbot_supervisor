@@ -30,6 +30,7 @@ move_next:
   connection: "api_to_ros"
   ros_topic: "/cmd_vel"
   ros_type: "geometry_msgs/Twist"
+  callback_supervisor: "supervisor_callbacks.move_next"
 poses:
   connection: "ros_to_api"
   callback_supervisor: "supervisor_callbacks.create_pose_list"

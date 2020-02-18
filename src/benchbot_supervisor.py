@@ -10,6 +10,7 @@ import re
 import rospkg
 import rospy
 import signal
+import traceback
 import tf2_ros
 import threading
 import yaml
@@ -68,13 +69,14 @@ def _to_simple_dict(data):
 class Supervisor(object):
     _BLANK_CONFIG = {
         'actions': [],
-        'environment': [],
+        'environment_name': [],
         'observations': [],
         'robot': {},
         'task_name': ''
     }
 
     def __init__(self, port=_SUPERVISOR_PORT):
+        print("Initialising supervisor")
         # Configuration parameters
         self.supervisor_address = 'http://0.0.0.0:' + str(port)
         self.task_file = None
@@ -83,6 +85,7 @@ class Supervisor(object):
         self.actions_file = None
         self.observations_file = None
         self.environment_file = None
+        self.environment_data = None
         self.config = None
 
         # Current state
@@ -91,6 +94,7 @@ class Supervisor(object):
         self.tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
+        print("Configuring the supervisor...")
         # Configure the Supervisor with provided arguments
         self.configure(
             task_file=rospy.get_param("~task_file", None),
@@ -215,6 +219,7 @@ class Supervisor(object):
         self.actions_file = actions_file
         self.observations_file = observations_file
         self.environment_file = environment_file
+
         self.load()
 
         print("Starting a supervisor with the following configuration:\n")
@@ -227,12 +232,16 @@ class Supervisor(object):
         # task_file
         self.config = self._BLANK_CONFIG.copy()
         for k in [
-                'task_file', 'robot_file', 'actions_file', 'observations_file',
-                'environment_file'
+                'task_file', 'robot_file', 'actions_file', 'observations_file'
         ]:
             self._load_config_from_file(k)
         if self.task_name is not None:
             self.config['task_name'] = self.task_name
+        if self.environment_file is not None:
+            with open(self.environment_file, 'r') as f:
+                self.environment_data = yaml.safe_load(f)
+            self.config['environment_name'] = (
+                self.environment_data['environment_name'])
 
         # Validate that we can satisfy all action & observation requests
         for x in self.config['actions'] + self.config['observations']:
@@ -285,6 +294,7 @@ class Supervisor(object):
             except Exception as e:
                 rospy.logerr("Supervisor failed on processing connection "
                              "'%s' with error:\n%s" % (connection, repr(e)))
+                traceback.print_exc()
                 flask.abort(500)
 
         # Configure our server

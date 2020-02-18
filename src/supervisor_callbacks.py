@@ -5,42 +5,136 @@ import jsonpickle.ext.numpy as jet
 import numpy as np
 import ros_numpy
 import rospy
-import transforms3d as t3
+from scipy.spatial.transform import Rotation as Rot
 
 from geometry_msgs.msg import Twist, Vector3
 
 jet.register_handlers()
 
-_MOVE_ANGLE_SPEED = 0.5
-_MOVE_DISTANCE_SPEED = 0.5
 _MOVE_HZ = 20
+
+_MOVE_TOL_DIST = 0.01
+_MOVE_TOL_YAW = np.deg2rad(1)
+
+_MOVE_ANGLE_K = 3
+
+_MOVE_POINT_K_RHO = 2
+_MOVE_POINT_K_ALPHA = 5
+
+
+def __ang_to_b_wrt_a(matrix_a, matrix_b):
+    # Computes the 2D angle to the location of homogenous transformation matrix
+    # b, wrt a
+    diff = __tr_b_wrt_a(matrix_a, matrix_b)
+    return np.arctan2(diff[1, 3], diff[0, 3])
+
+
+def __dist_from_a_to_b(matrix_a, matrix_b):
+    # Computes 2D distance from homogenous transformation matrix a to b
+    return np.linalg.norm(__tr_b_wrt_a(matrix_a, matrix_b)[0:2, 3])
 
 
 def __pi_wrap(angle):
     return np.mod(angle + np.pi, 2 * np.pi) - np.pi
 
 
+def __pose_vector_to_tf_matrix(pv):
+    # Expected format is [x,y,z,w,X,Y,Z]
+    return np.vstack((np.hstack((Rot.from_quat(pv[0:4]).as_dcm(),
+                                 np.array(pv[4:]).reshape(3,
+                                                          1))), [0, 0, 0, 1]))
+
+
 def __safe_dict_get(d, key, default):
     return d[key] if type(d) is dict and key in d else default
 
 
-def __transform_stamped_to_matrix(tfs):
+def __tf_ros_stamped_to_tf_matrix(tfs):
     # FFS ROS... how do you still not have a method for this in 2020...
-    return t3.affines.compose([
+    return __pose_vector_to_tf_matrix([
+        tfs.transform.rotation.x, tfs.transform.rotation.y,
+        tfs.transform.rotation.z, tfs.transform.rotation.w,
         tfs.transform.translation.x, tfs.transform.translation.y,
         tfs.transform.translation.z
-    ],
-                              t3.quaternions.quat2mat([
-                                  tfs.transform.rotation.w,
-                                  tfs.transform.rotation.x,
-                                  tfs.transform.rotation.y,
-                                  tfs.transform.rotation.z
-                              ]), [1, 1, 1])
+    ])
 
 
-def __pose_diff_matrices(pose_1, pose_2):
-    # Returns pose_2 - pose_1
-    return np.matmul(np.linalg.inv(pose_1), pose_2)
+def __tr_b_wrt_a(matrix_a, matrix_b):
+    # Computes matrix_b - matrix_a (transform b wrt to transform a)
+    return np.matmul(np.linalg.inv(matrix_a), matrix_b)
+
+
+def __transrpy_to_tf_matrix(trans, rpy):
+    # Takes a translation vector & roll pitch yaw vector
+    return __pose_vector_to_tf_matrix(
+        np.hstack((Rot.as_quat(Rot.from_rotvec(rpy)), trans)))
+
+
+def __yaw_b_wrt_a(matrix_a, matrix_b):
+    # Computes the yaw diff of homogenous transformation matrix b w.r.t. a
+    return Rot.as_rotvec(
+        Rot.from_dcm(__tr_b_wrt_a(matrix_a, matrix_b)[0:3, 0:3]))[2]
+
+
+def _current_pose(supervisor):
+    # TODO REMOVE HARDCODED FRAME NAMES!!!
+    return __tf_ros_stamped_to_tf_matrix(
+        supervisor.tf_buffer.lookup_transform('map', 'robot', rospy.Time()))
+
+
+def _move_to_angle(goal, publisher, supervisor):
+    # Servo until orientation matches that of the requested goal
+    vel_msg = Twist()
+    hz_rate = rospy.Rate(_MOVE_HZ)
+    while True:
+        # Get latest orientation error
+        orientation_error = __yaw_b_wrt_a(_current_pose(supervisor), goal)
+
+        # Bail if exit conditions are met
+        if np.abs(orientation_error) < _MOVE_TOL_YAW:
+            break
+
+        # Construct & send velocity msg
+        vel_msg.angular.z = _MOVE_ANGLE_K * orientation_error
+        publisher.publish(vel_msg)
+        hz_rate.sleep()
+    publisher.publish(Twist())
+
+
+def _move_to_pose(goal, publisher, supervisor):
+    # Servo to the point represented by goal, then rotate on spot to match pose
+    # NOTE: this was more feasible due to instabilities in pose servoing if
+    # poses are extremely close together (if "direction to goal" flips...
+    # angles all of a sudden have 180 degree error)
+
+    # Figure out direction
+    direction = (1 if np.abs(__ang_to_b_wrt_a(_current_pose(supervisor), goal))
+                 < np.pi else -1)
+
+    # Servo to point
+    # rho = distance from current to goal
+    # alpha = angle of goal vector in vehicle frame
+    vel_msg = Twist()
+    hz_rate = rospy.Rate(_MOVE_HZ)
+    while True:
+        # Get latest position error
+        current = _current_pose(supervisor)
+        rho = __dist_from_a_to_b(current, goal)
+        alpha = __ang_to_b_wrt_a(current, goal)
+
+        # Bail if exit conditions are met
+        if (rho < _MOVE_TOL_DIST):
+            break
+
+        # Construct & send velocity msg
+        vel_msg.linear.x = direction * _MOVE_POINT_K_RHO * rho
+        vel_msg.angular.z = direction * _MOVE_POINT_K_ALPHA * alpha
+        publisher.publish(vel_msg)
+        hz_rate.sleep()
+    publisher.publish(Twist())
+
+    # Servo to match requested orientation
+    _move_to_angle(goal, publisher, supervisor)
 
 
 def create_pose_list(data, supervisor):
@@ -48,28 +142,18 @@ def create_pose_list(data, supervisor):
     # TODO REMOVE HACK FOR FIXING CAMERA NAME!!!
     HARDCODED_POSES = ['odom', 'robot', 'left_camera', 'lidar']
     tfs = {
-        p: __transform_stamped_to_matrix(
+        p: __tf_ros_stamped_to_tf_matrix(
             supervisor.tf_buffer.lookup_transform('map', p, rospy.Time()))
         for p in HARDCODED_POSES
     }
     return jsonpickle.encode({
         'camera' if 'camera' in k else k: {
-            'parent_frame':
-                'map',
-            'translation_xyz':
-                t3.affines.decompose(v)[0],
-            'rotation_rpy':
-                t3.taitbryan.mat2euler(t3.affines.decompose(v)[1]),
-            'rotation_wxyz':
-                t3.quaternions.mat2quat(t3.affines.decompose(v)[1])
+            'parent_frame': 'map',
+            'translation_xyz': v[:-1, -1],
+            'rotation_rpy': Rot.from_dcm(v[:-1, :-1]).as_euler('XYZ'),
+            'rotation_xyzw': Rot.from_dcm(v[:-1, :-1]).as_quat()
         } for k, v in tfs.items()
     })
-
-
-def current_pose(data, supervisor):
-    # TODO REMOVE HARDCODED FRAME NAMES!!!
-    return __transform_stamped_to_matrix(
-        supervisor.tf_buffer.lookup_transform('map', 'robot', rospy.Time()))
 
 
 def encode_color_image(data, supervisor):
@@ -99,46 +183,43 @@ def encode_laserscan(data, supervisor):
 
 
 def move_angle(data, publisher, supervisor):
-    # TODO handle collisions
-    angle = __pi_wrap(__safe_dict_get(data, 'angle', 0))
-    vel_msg = Twist(angular=Vector3(z=np.sign(angle) * _MOVE_ANGLE_SPEED))
-    hz_rate = rospy.Rate(_MOVE_HZ)
-    try:
-        # Yes, this is pretty gross top to bottom. We have used a gross sign
-        # factor to make our while case consistent between +ve & -ve angles,
-        # and used some wrapping to hope our flimsy sign assumptions will hold
-        # for us.  Valid simplifying, or bug introduction? Time will tell...
-        start = current_pose(data, supervisor)
-        current = start
-        positive = (1 if angle >= 0 else -1)  # Yes, gross way to handle -ves
-        print("Moving to angle %f (hack factor: %d)" % (angle, positive))
-        print("Moved angle is: %f" %
-              t3.euler.mat2euler(__pose_diff_matrices(start, current))[2])
-        while (positive * __pi_wrap(angle - t3.euler.mat2euler(
-                __pose_diff_matrices(start, current))[2]) > 0):
-            publisher.publish(vel_msg)
-            hz_rate.sleep()
-            current = current_pose(data, supervisor)
-    except Exception as e:
-        rospy.logerr("move_angle: failed with exception '%s'" % e)
-    publisher.publish(Twist())
+    # Derive a corresponding goal pose & send the robot there
+    _move_to_pose(
+        np.matmul(
+            _current_pose(supervisor),
+            __transrpy_to_tf_matrix(
+                [0, 0, 0],
+                [0, 0, __pi_wrap(__safe_dict_get(data, 'angle', 0))])),
+        publisher, supervisor)
 
 
 def move_distance(data, publisher, supervisor):
-    # TODO handle collisions
-    distance = __safe_dict_get(data, 'distance', 0)
-    vel_msg = Twist(linear=Vector3(x=np.sign(distance) * _MOVE_DISTANCE_SPEED))
-    hz_rate = rospy.Rate(_MOVE_HZ)
-    try:
-        # This is relatively gross code at this stage...
-        start = current_pose(data, supervisor)
-        current = start
-        positive = (1 if distance >= 0 else -1)
-        while (positive * (distance - t3.affines.decompose(
-                __pose_diff_matrices(start, current))[0][0]) > 0):
-            publisher.publish(vel_msg)
-            hz_rate.sleep()
-            current = current_pose(data, supervisor)
-    except Exception as e:
-        rospy.logerr("move_distance: failed with exception '%s'" % e)
-    publisher.publish(Twist())
+    # Derive a corresponding goal pose & send the robot there
+    _move_to_pose(
+        np.matmul(
+            _current_pose(supervisor),
+            __transrpy_to_tf_matrix(
+                [__safe_dict_get(data, 'distance', 0), 0, 0], [0, 0, 0])),
+        publisher, supervisor)
+
+
+def move_next(data, publisher, supervisor):
+    # Configure if this is out first step
+    if 'trajectory_pose_next' not in supervisor.environment_data:
+        supervisor.environment_data['trajectory_pose_next'] = 0
+
+    # Servo to the goal pose
+    _move_to_pose(
+        __pose_vector_to_tf_matrix(
+            np.take(
+                np.fromstring(supervisor.environment_data['trajectory_poses'][
+                    supervisor.environment_data['trajectory_pose_next']].strip(
+                    )[1:-1],
+                              sep=", "), [1, 2, 3, 0, 4, 5, 6])), publisher,
+        supervisor)
+
+    # Register that we completed this goal
+    supervisor.environment_data['trajectory_pose_next'] += 1
+    if (supervisor.environment_data['trajectory_pose_next'] >= len(
+            supervisor.environment_data['trajectory_poses'])):
+        rospy.logerr("You have run out of trajectory poses!")
