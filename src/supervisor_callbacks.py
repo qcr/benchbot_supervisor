@@ -67,12 +67,13 @@ def __tr_b_wrt_a(matrix_a, matrix_b):
 def __transrpy_to_tf_matrix(trans, rpy):
     # Takes a translation vector & roll pitch yaw vector
     return __pose_vector_to_tf_matrix(
-        np.hstack((Rot.from_euler('XYZ',rpy).as_quat(), trans))
+        np.hstack((Rot.from_euler('XYZ', rpy).as_quat(), trans)))
 
 
 def __yaw_b_wrt_a(matrix_a, matrix_b):
     # Computes the yaw diff of homogenous transformation matrix b w.r.t. a
-    return Rot.from_dcm(__tr_b_wrt_a(matrix_a, matrix_b)[0:3, 0:3]).as_euler('XYZ')[2]
+    return Rot.from_dcm(__tr_b_wrt_a(matrix_a,
+                                     matrix_b)[0:3, 0:3]).as_euler('XYZ')[2]
 
 
 def _current_pose(supervisor):
