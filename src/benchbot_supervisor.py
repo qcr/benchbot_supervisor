@@ -174,6 +174,10 @@ class Supervisor(object):
 
         return __cb
 
+    def _is_finished(self):
+        return (self.environment_data['trajectory_pose_next'] >= len(
+            self.environment_data['trajectory_poses']))
+
     def _load_config_from_file(self, key):
         # Bit rough... but eh... that's why its hidden
         if self.config is None:
@@ -328,6 +332,14 @@ class Supervisor(object):
                              "issuing command '%s' to the simulator: %s" %
                              (command, e))
                 flask.abort(500)
+
+        @supervisor_flask.route('/status/<command>', methods=['GET'])
+        def __status_get(command):
+            if command == 'is_finished':
+                return flask.jsonify({'is_finished': self._is_finished()})
+            else:
+                rospy.logerr("Requested non-existent status: %s" % command)
+                flask.abort(404)
 
         # Configure our server
         supervisor_server = pywsgi.WSGIServer(
