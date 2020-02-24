@@ -1,15 +1,13 @@
 from copy import deepcopy
 import flask
-import gevent
-from gevent.event import Event
-from gevent.pywsgi import WSGIServer
+from gevent import event, pywsgi, signal
 import importlib
 import os
 import pprint
 import re
+import requests
 import rospkg
 import rospy
-import signal
 import traceback
 import tf2_ros
 import threading
@@ -88,14 +86,22 @@ class Supervisor(object):
         self.environment_data = None
         self.config = None
 
+        # Ensure a usable simulator address
+        self.simulator_address = rospy.get_param("~simulator_address", None)
+        if self.simulator_address is None:
+            raise ValueError(
+                "ERROR: No address was recieved for the simulator!")
+        elif not self.simulator_address.startswith("http://"):
+            self.simulator_address = 'http://' + self.simulator_address
+
         # Current state
         self.connections = {}
         self.state = {}
         self.tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
-        print("Configuring the supervisor...")
         # Configure the Supervisor with provided arguments
+        print("Configuring the supervisor...")
         self.configure(
             task_file=rospy.get_param("~task_file", None),
             task_name=rospy.get_param("~task_name", None),
@@ -261,7 +267,7 @@ class Supervisor(object):
                     (k, v['connection'] if 'connection' in v else None))
 
     def run(self):
-        # Setup all of the route managament functions
+        # Setup all of the supervisor managament functions
         supervisor_flask = flask.Flask(__name__)
 
         @supervisor_flask.route('/', methods=['GET'])
@@ -294,17 +300,30 @@ class Supervisor(object):
             except Exception as e:
                 rospy.logerr("Supervisor failed on processing connection "
                              "'%s' with error:\n%s" % (connection, repr(e)))
-                traceback.print_exc()
                 flask.abort(500)
 
+        @supervisor_flask.route('/simulator/<command>', methods=['GET'])
+        def __simulator_get(command):
+            try:
+                return flask.jsonify(
+                    requests.get(self.simulator_address + (
+                        '' if self.simulator_address.endswith('/') else '/') +
+                                 command).json())
+            except Exception as e:
+                rospy.logerr("Supervisor recieved the following error when "
+                             "issuing command '%s' to the simulator: %s" %
+                             (command, e))
+                flask.abort(500)
+            pass
+
         # Configure our server
-        supervisor_server = WSGIServer(
+        supervisor_server = pywsgi.WSGIServer(
             re.split('http[s]?://', self.supervisor_address)[-1],
             supervisor_flask)
-        evt = Event()
-        gevent.signal(signal.SIGINT, evt.set)
-        gevent.signal(signal.SIGQUIT, evt.set)
-        gevent.signal(signal.SIGTERM, evt.set)
+        evt = event.Event()
+        signal(signal.SIGINT, evt.set)
+        signal(signal.SIGQUIT, evt.set)
+        signal(signal.SIGTERM, evt.set)
 
         # Run the server in a blocking manner until the Supervisor is closed
         supervisor_server.start()
