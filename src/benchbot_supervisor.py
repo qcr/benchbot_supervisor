@@ -274,6 +274,10 @@ class Supervisor(object):
         def __hello():
             return flask.jsonify("Hello, I am the BenchBot supervisor")
 
+        @supervisor_flask.route('/config/', methods=['GET'])
+        def __config_full():
+            return flask.jsonify(self.config)
+
         @supervisor_flask.route('/config/<config>', methods=['GET'])
         def __config(config):
             if config in self.config:
@@ -302,6 +306,16 @@ class Supervisor(object):
                              "'%s' with error:\n%s" % (connection, repr(e)))
                 flask.abort(500)
 
+        @supervisor_flask.route('/simulator/', methods=['GET'])
+        def __simulator_check():
+            try:
+                return flask.jsonify(
+                    requests.get(self.simulator_address).json())
+            except Exception as e:
+                rospy.logerr("Supervisor failed to contact the simulator: %s" %
+                             e)
+                flask.abort(500)
+
         @supervisor_flask.route('/simulator/<command>', methods=['GET'])
         def __simulator_get(command):
             try:
@@ -314,7 +328,6 @@ class Supervisor(object):
                              "issuing command '%s' to the simulator: %s" %
                              (command, e))
                 flask.abort(500)
-            pass
 
         # Configure our server
         supervisor_server = pywsgi.WSGIServer(
