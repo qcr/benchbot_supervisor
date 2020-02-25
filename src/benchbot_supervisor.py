@@ -187,6 +187,11 @@ class Supervisor(object):
             self.config[(key[:-5] if key.endswith('_file') else
                          key)] = _open_yaml_file(getattr(self, key), key)
 
+    def _query_simulator(self, command):
+        return requests.get(self.simulator_address + (
+            '' if self.simulator_address.endswith('/') else '/') +
+                            command).json()
+
     def _register_connection(self, connection_name, connection_data):
         # Pull out imported components from the connection data
         topic_class, callback_supervisor_fn, callback_caching_fn = (
@@ -324,10 +329,7 @@ class Supervisor(object):
         @supervisor_flask.route('/simulator/<command>', methods=['GET'])
         def __simulator_get(command):
             try:
-                return flask.jsonify(
-                    requests.get(self.simulator_address + (
-                        '' if self.simulator_address.endswith('/') else '/') +
-                                 command).json())
+                return self._query_simulator(command)
             except Exception as e:
                 rospy.logerr("Supervisor recieved the following error when "
                              "issuing command '%s' to the simulator: %s" %

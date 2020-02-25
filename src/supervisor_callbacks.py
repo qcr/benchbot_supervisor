@@ -86,7 +86,7 @@ def _move_to_angle(goal, publisher, supervisor):
     # Servo until orientation matches that of the requested goal
     vel_msg = Twist()
     hz_rate = rospy.Rate(_MOVE_HZ)
-    while True:
+    while not supervisor._query_simulator('is_collided')['is_collided']:
         # Get latest orientation error
         orientation_error = __yaw_b_wrt_a(_current_pose(supervisor), goal)
 
@@ -116,7 +116,7 @@ def _move_to_pose(goal, publisher, supervisor):
     # alpha = angle of goal vector in vehicle frame
     vel_msg = Twist()
     hz_rate = rospy.Rate(_MOVE_HZ)
-    while True:
+    while not supervisor._query_simulator('is_collided')['is_collided']:
         # Get latest position error
         current = _current_pose(supervisor)
         rho = __dist_from_a_to_b(current, goal)
