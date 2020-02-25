@@ -204,7 +204,7 @@ def move_distance(data, publisher, supervisor):
 
 
 def move_next(data, publisher, supervisor):
-    # Configure if this is out first step
+    # Configure if this is our first step
     if 'trajectory_pose_next' not in supervisor.environment_data:
         supervisor.environment_data['trajectory_pose_next'] = 0
 

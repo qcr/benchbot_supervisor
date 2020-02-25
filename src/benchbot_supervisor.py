@@ -175,8 +175,9 @@ class Supervisor(object):
         return __cb
 
     def _is_finished(self):
-        return (self.environment_data['trajectory_pose_next'] >= len(
-            self.environment_data['trajectory_poses']))
+        return (False if 'trajectory_pose_next' not in self.environment_data
+                else self.environment_data['trajectory_pose_next'] >= len(
+                    self.environment_data['trajectory_poses']))
 
     def _load_config_from_file(self, key):
         # Bit rough... but eh... that's why its hidden
