@@ -329,6 +329,8 @@ class Supervisor(object):
         @supervisor_flask.route('/simulator/<command>', methods=['GET'])
         def __simulator_get(command):
             try:
+                if command == 'restart':
+                    self.environment_data['trajectory_pose_next'] = 0
                 return self._query_simulator(command)
             except Exception as e:
                 rospy.logerr("Supervisor recieved the following error when "
