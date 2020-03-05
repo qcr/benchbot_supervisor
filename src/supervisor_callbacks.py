@@ -67,13 +67,13 @@ def __tr_b_wrt_a(matrix_a, matrix_b):
 def __transrpy_to_tf_matrix(trans, rpy):
     # Takes a translation vector & roll pitch yaw vector
     return __pose_vector_to_tf_matrix(
-        np.hstack((Rot.as_quat(Rot.from_rotvec(rpy)), trans)))
+        np.hstack((Rot.from_euler('XYZ', rpy).as_quat(), trans)))
 
 
 def __yaw_b_wrt_a(matrix_a, matrix_b):
     # Computes the yaw diff of homogenous transformation matrix b w.r.t. a
-    return Rot.as_rotvec(
-        Rot.from_dcm(__tr_b_wrt_a(matrix_a, matrix_b)[0:3, 0:3]))[2]
+    return Rot.from_dcm(__tr_b_wrt_a(matrix_a,
+                                     matrix_b)[0:3, 0:3]).as_euler('XYZ')[2]
 
 
 def _current_pose(supervisor):
@@ -86,7 +86,7 @@ def _move_to_angle(goal, publisher, supervisor):
     # Servo until orientation matches that of the requested goal
     vel_msg = Twist()
     hz_rate = rospy.Rate(_MOVE_HZ)
-    while True:
+    while not supervisor._query_simulator('is_collided')['is_collided']:
         # Get latest orientation error
         orientation_error = __yaw_b_wrt_a(_current_pose(supervisor), goal)
 
@@ -116,7 +116,7 @@ def _move_to_pose(goal, publisher, supervisor):
     # alpha = angle of goal vector in vehicle frame
     vel_msg = Twist()
     hz_rate = rospy.Rate(_MOVE_HZ)
-    while True:
+    while not supervisor._query_simulator('is_collided')['is_collided']:
         # Get latest position error
         current = _current_pose(supervisor)
         rho = __dist_from_a_to_b(current, goal)
@@ -204,7 +204,7 @@ def move_distance(data, publisher, supervisor):
 
 
 def move_next(data, publisher, supervisor):
-    # Configure if this is out first step
+    # Configure if this is our first step
     if 'trajectory_pose_next' not in supervisor.environment_data:
         supervisor.environment_data['trajectory_pose_next'] = 0
 
