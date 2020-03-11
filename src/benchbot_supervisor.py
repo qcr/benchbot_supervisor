@@ -67,7 +67,7 @@ def _to_simple_dict(data):
 class Supervisor(object):
     _BLANK_CONFIG = {
         'actions': [],
-        'environment_name': [],
+        'environment_names': [],
         'observations': [],
         'robot': {},
         'task_name': ''
@@ -82,15 +82,16 @@ class Supervisor(object):
         self.robot_file = None
         self.actions_file = None
         self.observations_file = None
-        self.environment_file = None
+        self.environment_files = None
         self.environment_data = None
+        self.environment_name = None  # Name of currently loaded environment
         self.config = None
 
         # Ensure a usable simulator address
         self.simulator_address = rospy.get_param("~simulator_address", None)
         if self.simulator_address is None:
             raise ValueError(
-                "ERROR: No address was recieved for the simulator!")
+                "ERROR: No address was received for the simulator!")
         elif not self.simulator_address.startswith("http://"):
             self.simulator_address = 'http://' + self.simulator_address
 
@@ -108,7 +109,7 @@ class Supervisor(object):
             robot_file=rospy.get_param("~robot_file", None),
             actions_file=rospy.get_param("~actions_file", None),
             observations_file=rospy.get_param("~observations_file", None),
-            environment_file=rospy.get_param("~environment_file", None))
+            environment_files=rospy.get_param("~environment_files", None))
 
     @staticmethod
     def _attempt_connection_imports(connection_data):
@@ -228,13 +229,14 @@ class Supervisor(object):
                   robot_file=None,
                   actions_file=None,
                   observations_file=None,
-                  environment_file=None):
+                  environment_files=None):
         self.task_file = task_file
         self.task_name = task_name
         self.robot_file = robot_file
         self.actions_file = actions_file
         self.observations_file = observations_file
-        self.environment_file = environment_file
+        self.environment_files = (None if environment_files is None else
+                                  environment_files.split(':'))
 
         self.load()
 
@@ -253,11 +255,14 @@ class Supervisor(object):
             self._load_config_from_file(k)
         if self.task_name is not None:
             self.config['task_name'] = self.task_name
-        if self.environment_file is not None:
-            with open(self.environment_file, 'r') as f:
-                self.environment_data = yaml.safe_load(f)
-            self.config['environment_name'] = (
-                self.environment_data['environment_name'])
+        if self.environment_files is not None:
+            self.environment_data = {}
+            self.config['environment_names'] = []
+            for f in self.environment_files:
+                with open(f, 'r') as fd:
+                    d = yaml.safe_load(fd)
+                self.environment_data[d['environment_name']] = d
+                self.config['environment_names'].append(d['environment_name'])
 
         # Validate that we can satisfy all action & observation requests
         for x in self.config['actions'] + self.config['observations']:
@@ -329,11 +334,17 @@ class Supervisor(object):
         @supervisor_flask.route('/simulator/<command>', methods=['GET'])
         def __simulator_get(command):
             try:
-                if command == 'restart':
-                    self.environment_data['trajectory_pose_next'] = 0
-                return self._query_simulator(command)
+                resp = self._query_simulator(command)
+                if (resp.values()[0] and
+                        command in ['next', 'reset', 'restart']):
+                    self.environment_name = (
+                        self.config['environment_names'][self._query_simulator(
+                            'map_selection_number')['map_selection_number']])
+                    self.environment_data[
+                        self.environment_name]['trajectory_pose_next'] = 0
+                return resp
             except Exception as e:
-                rospy.logerr("Supervisor recieved the following error when "
+                rospy.logerr("Supervisor received the following error when "
                              "issuing command '%s' to the simulator: %s" %
                              (command, e))
                 flask.abort(500)
@@ -342,6 +353,9 @@ class Supervisor(object):
         def __status_get(command):
             if command == 'is_finished':
                 return flask.jsonify({'is_finished': self._is_finished()})
+            elif command == 'environment_name':
+                return flask.jsonify(
+                    {'environment_name': self.environment_name})
             else:
                 rospy.logerr("Requested non-existent status: %s" % command)
                 flask.abort(404)
