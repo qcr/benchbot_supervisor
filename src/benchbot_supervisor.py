@@ -176,9 +176,11 @@ class Supervisor(object):
         return __cb
 
     def _is_finished(self):
-        return (False if 'trajectory_pose_next' not in self.environment_data
-                else self.environment_data['trajectory_pose_next'] >= len(
-                    self.environment_data['trajectory_poses']))
+        return (False if 'trajectory_pose_next' not in self.environment_data[
+            self.environment_name] else
+                self.environment_data[self.environment_name]
+                ['trajectory_pose_next'] >= len(self.environment_data[
+                    self.environment_name]['trajectory_poses']))
 
     def _load_config_from_file(self, key):
         # Bit rough... but eh... that's why its hidden
@@ -351,6 +353,10 @@ class Supervisor(object):
 
         @supervisor_flask.route('/status/<command>', methods=['GET'])
         def __status_get(command):
+            if self.environment_name is None:
+                self.environment_name = (
+                    self.config['environment_names'][self._query_simulator(
+                        'map_selection_number')['map_selection_number']])
             if command == 'is_finished':
                 return flask.jsonify({'is_finished': self._is_finished()})
             elif command == 'environment_name':

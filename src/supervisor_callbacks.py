@@ -216,7 +216,7 @@ def move_distance(data, publisher, supervisor):
 
 def move_next(data, publisher, supervisor):
     # Configure if this is our first step
-    if (supervisor.environment_name is None):
+    if supervisor.environment_name is None:
         supervisor.environment_name = (
             supervisor.config['environment_names'][supervisor._query_simulator(
                 'map_selection_number')['map_selection_number']])
