@@ -162,8 +162,8 @@ def encode_camera_info(data, supervisor):
         'frame_id': data.header.frame_id,
         'height': data.height,
         'width': data.width,
-        'K': np.reshape(data.K, (3, 3)),
-        'P': np.reshape(data.P, (3, 4))
+        'matrix_intrinsics': np.reshape(data.K, (3, 3)),
+        'matrix_projection': np.reshape(data.P, (3, 4))
     })
 
 
