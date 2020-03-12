@@ -3,6 +3,7 @@ import cv2
 import jsonpickle
 import jsonpickle.ext.numpy as jet
 import numpy as np
+import pprint
 import ros_numpy
 import rospy
 from scipy.spatial.transform import Rotation as Rot
@@ -156,6 +157,16 @@ def create_pose_list(data, supervisor):
     })
 
 
+def encode_camera_info(data, supervisor):
+    return jsonpickle.encode({
+        'frame_id': data.header.frame_id,
+        'height': data.height,
+        'width': data.width,
+        'matrix_intrinsics': np.reshape(data.K, (3, 3)),
+        'matrix_projection': np.reshape(data.P, (3, 4))
+    })
+
+
 def encode_color_image(data, supervisor):
     return {
         'encoding':
@@ -205,21 +216,30 @@ def move_distance(data, publisher, supervisor):
 
 def move_next(data, publisher, supervisor):
     # Configure if this is our first step
-    if 'trajectory_pose_next' not in supervisor.environment_data:
-        supervisor.environment_data['trajectory_pose_next'] = 0
+    if supervisor.environment_name is None:
+        supervisor.environment_name = (
+            supervisor.config['environment_names'][supervisor._query_simulator(
+                'map_selection_number')['map_selection_number']])
+    if ('trajectory_pose_next' not in supervisor.environment_data[
+            supervisor.environment_name]):
+        supervisor.environment_data[
+            supervisor.environment_name]['trajectory_pose_next'] = 0
 
     # Servo to the goal pose
     _move_to_pose(
         __pose_vector_to_tf_matrix(
             np.take(
-                np.fromstring(supervisor.environment_data['trajectory_poses'][
-                    supervisor.environment_data['trajectory_pose_next']].strip(
-                    )[1:-1],
-                              sep=", "), [1, 2, 3, 0, 4, 5, 6])), publisher,
-        supervisor)
+                np.fromstring(
+                    supervisor.environment_data[
+                        supervisor.environment_name]['trajectory_poses']
+                    [supervisor.environment_data[supervisor.environment_name]
+                     ['trajectory_pose_next']].strip()[1:-1],
+                    sep=", "), [1, 2, 3, 0, 4, 5, 6])), publisher, supervisor)
 
     # Register that we completed this goal
-    supervisor.environment_data['trajectory_pose_next'] += 1
-    if (supervisor.environment_data['trajectory_pose_next'] >= len(
-            supervisor.environment_data['trajectory_poses'])):
+    supervisor.environment_data[
+        supervisor.environment_name]['trajectory_pose_next'] += 1
+    if (supervisor.environment_data[supervisor.environment_name]
+        ['trajectory_pose_next'] >= len(supervisor.environment_data[
+            supervisor.environment_name]['trajectory_poses'])):
         rospy.logerr("You have run out of trajectory poses!")

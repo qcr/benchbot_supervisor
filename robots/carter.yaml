@@ -4,12 +4,24 @@ image_depth:
   ros_type: "sensor_msgs/Image"
   callback_supervisor: "supervisor_callbacks.encode_depth_image"
   callback_api: "api_callbacks.decode_jsonpickle"
+image_depth_info:
+  connection: "ros_to_api"
+  ros_topic: "/camera/depth/camera_info"
+  ros_type: "sensor_msgs/CameraInfo"
+  callback_supervisor: "supervisor_callbacks.encode_camera_info"
+  callback_api: "api_callbacks.decode_jsonpickle"
 image_rgb:
   connection: "ros_to_api"
   ros_topic: "/camera/color/image_raw"
   ros_type: "sensor_msgs/Image"
   callback_supervisor: "supervisor_callbacks.encode_color_image"
   callback_api: "api_callbacks.decode_color_image"
+image_rgb_info:
+  connection: "ros_to_api"
+  ros_topic: "/camera/color/camera_info"
+  ros_type: "sensor_msgs/CameraInfo"
+  callback_supervisor: "supervisor_callbacks.encode_camera_info"
+  callback_api: "api_callbacks.decode_jsonpickle"
 laser:
   connection: "ros_to_api"
   ros_topic: "/scan_laser"
