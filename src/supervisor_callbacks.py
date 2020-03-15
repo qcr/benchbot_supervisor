@@ -198,10 +198,10 @@ def move_angle(data, publisher, supervisor):
     _move_to_pose(
         np.matmul(
             _current_pose(supervisor),
-            __transrpy_to_tf_matrix(
-                [0, 0, 0],
-                [0, 0, __pi_wrap(__safe_dict_get(data, 'angle', 0))])),
-        publisher, supervisor)
+            __transrpy_to_tf_matrix([0, 0, 0], [
+                0, 0,
+                __pi_wrap(np.deg2rad(__safe_dict_get(data, 'angle', 0)))
+            ])), publisher, supervisor)
 
 
 def move_distance(data, publisher, supervisor):
