@@ -1,5 +1,0 @@
-task_name: "Semantic SLAM Active Control"
-robot_file: "carter.yaml"
-actions_file: "active_control.yaml"
-observations_file: "ground_truth.yaml"
-environment_file: "isaac_office.yaml"
