@@ -3,4 +3,4 @@ gevent
 jsonpickle
 numpy
 requests
-scipy
+scipy>=1.2.0
