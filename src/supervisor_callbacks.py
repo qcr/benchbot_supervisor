@@ -183,9 +183,10 @@ def encode_depth_image(data, supervisor):
 def encode_laserscan(data, supervisor):
     return jsonpickle.encode({
         'scans':
-            np.array(
-                [[data.ranges[i], data.angle_min + i * data.angle_increment]
-                 for i in range(0, len(data.ranges))]),
+            np.array([[
+                data.ranges[i],
+                __pi_wrap(data.angle_min + i * data.angle_increment)
+            ] for i in range(0, len(data.ranges))]),
         'range_min':
             data.range_min,
         'range_max':
@@ -198,10 +199,10 @@ def move_angle(data, publisher, supervisor):
     _move_to_pose(
         np.matmul(
             _current_pose(supervisor),
-            __transrpy_to_tf_matrix(
-                [0, 0, 0],
-                [0, 0, __pi_wrap(__safe_dict_get(data, 'angle', 0))])),
-        publisher, supervisor)
+            __transrpy_to_tf_matrix([0, 0, 0], [
+                0, 0,
+                __pi_wrap(np.deg2rad(__safe_dict_get(data, 'angle', 0)))
+            ])), publisher, supervisor)
 
 
 def move_distance(data, publisher, supervisor):
