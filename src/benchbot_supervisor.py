@@ -371,9 +371,9 @@ class Supervisor(object):
             re.split('http[s]?://', self.supervisor_address)[-1],
             supervisor_flask)
         evt = event.Event()
-        signal(signal.SIGINT, evt.set)
-        signal(signal.SIGQUIT, evt.set)
-        signal(signal.SIGTERM, evt.set)
+        signal.signal(signal.SIGINT, evt.set)
+        signal.signal(signal.SIGQUIT, evt.set)
+        signal.signal(signal.SIGTERM, evt.set)
 
         # Run the server in a blocking manner until the Supervisor is closed
         supervisor_server.start()
