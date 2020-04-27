@@ -77,6 +77,26 @@ def __yaw_b_wrt_a(matrix_a, matrix_b):
                                      matrix_b)[0:3, 0:3]).as_euler('XYZ')[2]
 
 
+def _debug_move(data, publisher, supervisor):
+    # Accepts:
+    # - rot_yaw: forms a tf matrix using yaw alone
+    # - rot_xyzw: forms a tf matrix using xyzq quat
+    # - trans_xyz: forms a tf matrix using xyz translation
+    # Priority:
+    # - Uses 'rot_yaw' if both rotation options are provided
+    # Default:
+    # - Uses 0 rotation & translation if values are missing
+
+    relative_pose = (__transrpy_to_tf_matrix(
+        __safe_dict_get(data, 'trans_xyz', [0, 0, 0]),
+        [0, 0, np.deg2rad(__safe_dict_get(data, 'rot_yaw', 0))])
+                     if 'rot_yaw' in data else __pose_vector_to_tf_matrix(
+                         __safe_dict_get(data, 'rot_xyzw', [0, 0, 0, 1]) +
+                         __safe_dict_get(data, 'trans_xyz', [0, 0, 0])))
+    _move_to_pose(np.matmul(_current_pose(supervisor), relative_pose),
+                  publisher, supervisor)
+
+
 def _current_pose(supervisor):
     # TODO REMOVE HARDCODED FRAME NAMES!!!
     return __tf_ros_stamped_to_tf_matrix(
