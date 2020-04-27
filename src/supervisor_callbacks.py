@@ -51,7 +51,7 @@ def __safe_dict_get(d, key, default):
 
 
 def __tf_ros_stamped_to_tf_matrix(tfs):
-    # FFS ROS... how do you still not have a method for this in 2020...
+    # ROS... how do you still not have a method for this in 2020...
     return __pose_vector_to_tf_matrix([
         tfs.transform.rotation.x, tfs.transform.rotation.y,
         tfs.transform.rotation.z, tfs.transform.rotation.w,
@@ -86,15 +86,27 @@ def _debug_move(data, publisher, supervisor):
     # - Uses 'rot_yaw' if both rotation options are provided
     # Default:
     # - Uses 0 rotation & translation if values are missing
+    def print_pose(pose):
+        rpy = Rot.from_dcm(pose[0:3, 0:3]).as_euler('XYZ', degrees=True)
+        return ("rpy: %f, %f, %f  xyz: %f, %f, %f" %
+                tuple(np.hstack((rpy, pose[0:3, 3].transpose()))))
 
+    pose_a = _current_pose(supervisor)
+    print("STARTING @ POSE: %s" % print_pose(pose_a))
     relative_pose = (__transrpy_to_tf_matrix(
         __safe_dict_get(data, 'trans_xyz', [0, 0, 0]),
         [0, 0, np.deg2rad(__safe_dict_get(data, 'rot_yaw', 0))])
                      if 'rot_yaw' in data else __pose_vector_to_tf_matrix(
                          __safe_dict_get(data, 'rot_xyzw', [0, 0, 0, 1]) +
                          __safe_dict_get(data, 'trans_xyz', [0, 0, 0])))
-    _move_to_pose(np.matmul(_current_pose(supervisor), relative_pose),
-                  publisher, supervisor)
+    print("GOAL POSE (RELATIVE): %s" % print_pose(relative_pose))
+    print("GOAL POSE (ABSOLUTE): %s" %
+          print_pose(np.matmul(pose_a, relative_pose)))
+    _move_to_pose(np.matmul(pose_a, relative_pose), publisher, supervisor)
+    pose_b = _current_pose(supervisor)
+    print("FINAL POSE (RELATIVE): %s" %
+          print_pose(__tr_b_wrt_a(pose_a, pose_b)))
+    print("FINAL POSE (ABSOLUTE): %s" % print_pose(pose_b))
 
 
 def _current_pose(supervisor):
