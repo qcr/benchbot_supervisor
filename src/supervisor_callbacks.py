@@ -19,8 +19,9 @@ _MOVE_TOL_YAW = np.deg2rad(1)
 
 _MOVE_ANGLE_K = 3
 
-_MOVE_POINT_K_RHO = 2
-_MOVE_POINT_K_ALPHA = 5
+_MOVE_POSE_K_RHO = 1
+_MOVE_POSE_K_ALPHA = 5
+_MOVE_POSE_K_BETA = -2
 
 
 def __ang_to_b_wrt_a(matrix_a, matrix_b):
@@ -135,18 +136,16 @@ def _move_to_angle(goal, publisher, supervisor):
 
 
 def _move_to_pose(goal, publisher, supervisor):
-    # Servo to the point represented by goal, then rotate on spot to match pose
-    # NOTE: this was more feasible due to instabilities in pose servoing if
-    # poses are extremely close together (if "direction to goal" flips...
-    # angles all of a sudden have 180 degree error)
+    # Servo to desired pose using control described in Corke p. 108
 
     # Figure out direction
     direction = (1 if np.abs(__ang_to_b_wrt_a(_current_pose(supervisor), goal))
-                 < np.pi else -1)
+                 < np.pi / 2 else -1)
 
     # Servo to point
     # rho = distance from current to goal
     # alpha = angle of goal vector in vehicle frame
+    # beta = angle between current yaw & desired yaw
     vel_msg = Twist()
     hz_rate = rospy.Rate(_MOVE_HZ)
     while not supervisor._query_simulator('is_collided')['is_collided']:
@@ -154,14 +153,16 @@ def _move_to_pose(goal, publisher, supervisor):
         current = _current_pose(supervisor)
         rho = __dist_from_a_to_b(current, goal)
         alpha = __ang_to_b_wrt_a(current, goal)
+        beta = __yaw_b_wrt_a(current, goal)
 
         # Bail if exit conditions are met
-        if (rho < _MOVE_TOL_DIST):
+        if (rho < _MOVE_TOL_DIST and np.abs(beta) < _MOVE_TOL_YAW):
             break
 
         # Construct & send velocity msg
-        vel_msg.linear.x = direction * _MOVE_POINT_K_RHO * rho
-        vel_msg.angular.z = direction * _MOVE_POINT_K_ALPHA * alpha
+        vel_msg.linear.x = direction * _MOVE_POSE_K_RHO * rho
+        vel_msg.angular.z = direction * (_MOVE_POSE_K_ALPHA * alpha +
+                                         _MOVE_POSE_K_BETA * beta)
         publisher.publish(vel_msg)
         hz_rate.sleep()
     publisher.publish(Twist())
