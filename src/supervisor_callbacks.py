@@ -24,6 +24,12 @@ _MOVE_POSE_K_ALPHA = 5
 _MOVE_POSE_K_BETA = -2
 
 
+def __ang_to_b(matrix_a, matrix_b):
+    # Computes the angle to matrix b, from the point specified in matrix a
+    return np.arctan2(matrix_b[1, 3] - matrix_a[1, 3],
+                      matrix_b[0, 3] - matrix_a[0, 3])
+
+
 def __ang_to_b_wrt_a(matrix_a, matrix_b):
     # Computes the 2D angle to the location of homogenous transformation matrix
     # b, wrt a
@@ -70,6 +76,11 @@ def __transrpy_to_tf_matrix(trans, rpy):
     # Takes a translation vector & roll pitch yaw vector
     return __pose_vector_to_tf_matrix(
         np.hstack((Rot.from_euler('XYZ', rpy).as_quat(), trans)))
+
+
+def __yaw(matrix):
+    # Extracts the yaw value from a matrix
+    return Rot.from_dcm(matrix[0:3, 0:3]).as_euler('XYZ')[2]
 
 
 def __yaw_b_wrt_a(matrix_a, matrix_b):
@@ -136,13 +147,9 @@ def _move_to_angle(goal, publisher, supervisor):
 
 
 def _move_to_pose(goal, publisher, supervisor):
-    # Servo to desired pose using control described in Corke p. 108
-
-    # Figure out direction
-    direction = (1 if np.abs(__ang_to_b_wrt_a(_current_pose(supervisor), goal))
-                 < np.pi / 2 else -1)
-
-    # Servo to point
+    # Servo to desired pose using control described in Robotics, Vision, &
+    # Control 2nd Ed (Corke, p. 108)
+    # NOTE we also had to handle adjusting alpha correctly for reversing
     # rho = distance from current to goal
     # alpha = angle of goal vector in vehicle frame
     # beta = angle between current yaw & desired yaw
@@ -152,23 +159,30 @@ def _move_to_pose(goal, publisher, supervisor):
         # Get latest position error
         current = _current_pose(supervisor)
         rho = __dist_from_a_to_b(current, goal)
-        alpha = __ang_to_b_wrt_a(current, goal)
-        beta = __yaw_b_wrt_a(current, goal)
+        alpha = __pi_wrap(__ang_to_b(current, goal) - __yaw(current))
+        beta = __pi_wrap(__yaw(goal) - __ang_to_b(current, goal))
 
-        # Bail if exit conditions are met
-        if (rho < _MOVE_TOL_DIST and np.abs(beta) < _MOVE_TOL_YAW):
+        # Identify if the goal is behind us, & appropriately transform the
+        # angles to reflect that we will reverse to the goal
+        backwards = np.abs(__ang_to_b_wrt_a(current, goal)) > np.pi / 2
+        if backwards:
+            alpha = __pi_wrap(alpha + np.pi)
+            beta = __pi_wrap(beta + np.pi)
+
+        # If within distance tolerance, correct angle & quit (the controller
+        # aims to drive the robot in at the correct angle, if it is already
+        # "in" but the angle is wrong, it will get stuck!)
+        if rho < _MOVE_TOL_DIST:
+            _move_to_angle(goal, publisher, supervisor)
             break
 
         # Construct & send velocity msg
-        vel_msg.linear.x = direction * _MOVE_POSE_K_RHO * rho
-        vel_msg.angular.z = direction * (_MOVE_POSE_K_ALPHA * alpha +
-                                         _MOVE_POSE_K_BETA * beta)
+        vel_msg.linear.x = (-1 if backwards else 1) * _MOVE_POSE_K_RHO * rho
+        vel_msg.angular.z = (_MOVE_POSE_K_ALPHA * alpha +
+                             _MOVE_POSE_K_BETA * beta)
         publisher.publish(vel_msg)
         hz_rate.sleep()
     publisher.publish(Twist())
-
-    # Servo to match requested orientation
-    _move_to_angle(goal, publisher, supervisor)
 
 
 def create_pose_list(data, supervisor):
