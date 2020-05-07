@@ -19,8 +19,15 @@ _MOVE_TOL_YAW = np.deg2rad(1)
 
 _MOVE_ANGLE_K = 3
 
-_MOVE_POINT_K_RHO = 2
-_MOVE_POINT_K_ALPHA = 5
+_MOVE_POSE_K_RHO = 1.5
+_MOVE_POSE_K_ALPHA = 7.5
+_MOVE_POSE_K_BETA = -3
+
+
+def __ang_to_b(matrix_a, matrix_b):
+    # Computes the angle to matrix b, from the point specified in matrix a
+    return np.arctan2(matrix_b[1, 3] - matrix_a[1, 3],
+                      matrix_b[0, 3] - matrix_a[0, 3])
 
 
 def __ang_to_b_wrt_a(matrix_a, matrix_b):
@@ -51,7 +58,7 @@ def __safe_dict_get(d, key, default):
 
 
 def __tf_ros_stamped_to_tf_matrix(tfs):
-    # FFS ROS... how do you still not have a method for this in 2020...
+    # ROS... how do you still not have a method for this in 2020...
     return __pose_vector_to_tf_matrix([
         tfs.transform.rotation.x, tfs.transform.rotation.y,
         tfs.transform.rotation.z, tfs.transform.rotation.w,
@@ -71,10 +78,47 @@ def __transrpy_to_tf_matrix(trans, rpy):
         np.hstack((Rot.from_euler('XYZ', rpy).as_quat(), trans)))
 
 
+def __yaw(matrix):
+    # Extracts the yaw value from a matrix
+    return Rot.from_dcm(matrix[0:3, 0:3]).as_euler('XYZ')[2]
+
+
 def __yaw_b_wrt_a(matrix_a, matrix_b):
     # Computes the yaw diff of homogenous transformation matrix b w.r.t. a
     return Rot.from_dcm(__tr_b_wrt_a(matrix_a,
                                      matrix_b)[0:3, 0:3]).as_euler('XYZ')[2]
+
+
+def _debug_move(data, publisher, supervisor):
+    # Accepts:
+    # - rot_yaw: forms a tf matrix using yaw alone
+    # - rot_xyzw: forms a tf matrix using xyzq quat
+    # - trans_xyz: forms a tf matrix using xyz translation
+    # Priority:
+    # - Uses 'rot_yaw' if both rotation options are provided
+    # Default:
+    # - Uses 0 rotation & translation if values are missing
+    def print_pose(pose):
+        rpy = Rot.from_dcm(pose[0:3, 0:3]).as_euler('XYZ', degrees=True)
+        return ("rpy: %f, %f, %f  xyz: %f, %f, %f" %
+                tuple(np.hstack((rpy, pose[0:3, 3].transpose()))))
+
+    pose_a = _current_pose(supervisor)
+    print("STARTING @ POSE: %s" % print_pose(pose_a))
+    relative_pose = (__transrpy_to_tf_matrix(
+        __safe_dict_get(data, 'trans_xyz', [0, 0, 0]),
+        [0, 0, np.deg2rad(__safe_dict_get(data, 'rot_yaw', 0))])
+                     if 'rot_yaw' in data else __pose_vector_to_tf_matrix(
+                         __safe_dict_get(data, 'rot_xyzw', [0, 0, 0, 1]) +
+                         __safe_dict_get(data, 'trans_xyz', [0, 0, 0])))
+    print("GOAL POSE (RELATIVE): %s" % print_pose(relative_pose))
+    print("GOAL POSE (ABSOLUTE): %s" %
+          print_pose(np.matmul(pose_a, relative_pose)))
+    _move_to_pose(np.matmul(pose_a, relative_pose), publisher, supervisor)
+    pose_b = _current_pose(supervisor)
+    print("FINAL POSE (RELATIVE): %s" %
+          print_pose(__tr_b_wrt_a(pose_a, pose_b)))
+    print("FINAL POSE (ABSOLUTE): %s" % print_pose(pose_b))
 
 
 def _current_pose(supervisor):
@@ -103,39 +147,42 @@ def _move_to_angle(goal, publisher, supervisor):
 
 
 def _move_to_pose(goal, publisher, supervisor):
-    # Servo to the point represented by goal, then rotate on spot to match pose
-    # NOTE: this was more feasible due to instabilities in pose servoing if
-    # poses are extremely close together (if "direction to goal" flips...
-    # angles all of a sudden have 180 degree error)
-
-    # Figure out direction
-    direction = (1 if np.abs(__ang_to_b_wrt_a(_current_pose(supervisor), goal))
-                 < np.pi else -1)
-
-    # Servo to point
+    # Servo to desired pose using control described in Robotics, Vision, &
+    # Control 2nd Ed (Corke, p. 108)
+    # NOTE we also had to handle adjusting alpha correctly for reversing
     # rho = distance from current to goal
     # alpha = angle of goal vector in vehicle frame
+    # beta = angle between current yaw & desired yaw
     vel_msg = Twist()
     hz_rate = rospy.Rate(_MOVE_HZ)
     while not supervisor._query_simulator('is_collided')['is_collided']:
         # Get latest position error
         current = _current_pose(supervisor)
         rho = __dist_from_a_to_b(current, goal)
-        alpha = __ang_to_b_wrt_a(current, goal)
+        alpha = __pi_wrap(__ang_to_b(current, goal) - __yaw(current))
+        beta = __pi_wrap(__yaw(goal) - __ang_to_b(current, goal))
 
-        # Bail if exit conditions are met
-        if (rho < _MOVE_TOL_DIST):
+        # Identify if the goal is behind us, & appropriately transform the
+        # angles to reflect that we will reverse to the goal
+        backwards = np.abs(__ang_to_b_wrt_a(current, goal)) > np.pi / 2
+        if backwards:
+            alpha = __pi_wrap(alpha + np.pi)
+            beta = __pi_wrap(beta + np.pi)
+
+        # If within distance tolerance, correct angle & quit (the controller
+        # aims to drive the robot in at the correct angle, if it is already
+        # "in" but the angle is wrong, it will get stuck!)
+        if rho < _MOVE_TOL_DIST:
+            _move_to_angle(goal, publisher, supervisor)
             break
 
         # Construct & send velocity msg
-        vel_msg.linear.x = direction * _MOVE_POINT_K_RHO * rho
-        vel_msg.angular.z = direction * _MOVE_POINT_K_ALPHA * alpha
+        vel_msg.linear.x = (-1 if backwards else 1) * _MOVE_POSE_K_RHO * rho
+        vel_msg.angular.z = (_MOVE_POSE_K_ALPHA * alpha +
+                             _MOVE_POSE_K_BETA * beta)
         publisher.publish(vel_msg)
         hz_rate.sleep()
     publisher.publish(Twist())
-
-    # Servo to match requested orientation
-    _move_to_angle(goal, publisher, supervisor)
 
 
 def create_pose_list(data, supervisor):
