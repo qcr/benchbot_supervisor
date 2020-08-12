@@ -74,7 +74,7 @@ class Supervisor(object):
     }
 
     def __init__(self, port=_SUPERVISOR_PORT):
-        print("Initialising supervisor")
+        print("Initialising supervisor...")
         # Configuration parameters
         self.supervisor_address = 'http://0.0.0.0:' + str(port)
         self.task_file = None
@@ -268,10 +268,11 @@ class Supervisor(object):
 
         # Validate that we can satisfy all action & observation requests
         for x in self.config['actions'] + self.config['observations']:
-            if x not in self.config['robot']:
+            if self.config['robot'] is None or x not in self.config['robot']:
                 raise ValueError(
                     "An action / observation was defined using the connection '%s',"
-                    " which was not declared for the robot" % x)
+                    " which was not declared for the robot in file '%s'" %
+                    (x, self.robot_file))
 
         # Update ROS connections
         for k, v in self.config['robot'].items():
