@@ -47,8 +47,3 @@ poses:
   connection: "ros_to_api"
   callback_supervisor: "supervisor_callbacks.create_pose_list"
   callback_api: "api_callbacks.decode_jsonpickle"
-_debug_move:
-  connection: "api_to_ros"
-  ros_topic: "/cmd_vel"
-  ros_type: "geometry_msgs/Twist"
-  callback_supervisor: "supervisor_callbacks._debug_move"
