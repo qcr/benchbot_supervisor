@@ -87,13 +87,12 @@ class Supervisor(object):
         self.environment_name = None  # Name of currently loaded environment
         self.config = None
 
-        # Ensure a usable simulator address
-        self.simulator_address = rospy.get_param("~simulator_address", None)
-        if self.simulator_address is None:
-            raise ValueError(
-                "ERROR: No address was received for the simulator!")
-        elif not self.simulator_address.startswith("http://"):
-            self.simulator_address = 'http://' + self.simulator_address
+        # Ensure a usable robot address
+        self.robot_address = rospy.get_param("~robot_address", None)
+        if self.robot_address is None:
+            raise ValueError("ERROR: No address was received for the robot!")
+        elif not self.robot_address.startswith("http://"):
+            self.robot_address = 'http://' + self.robot_address
 
         # Current state
         self.connections = {}
@@ -190,9 +189,9 @@ class Supervisor(object):
             self.config[(key[:-5] if key.endswith('_file') else
                          key)] = _open_yaml_file(getattr(self, key), key)
 
-    def _query_simulator(self, command):
-        return requests.get(self.simulator_address + (
-            '' if self.simulator_address.endswith('/') else '/') +
+    def _query_robot(self, command):
+        return requests.get(self.robot_address +
+                            ('' if self.robot_address.endswith('/') else '/') +
                             command).json()
 
     def _register_connection(self, connection_name, connection_data):
@@ -324,31 +323,29 @@ class Supervisor(object):
                              "'%s' with error:\n%s" % (connection, repr(e)))
                 flask.abort(500)
 
-        @supervisor_flask.route('/simulator/', methods=['GET'])
-        def __simulator_check():
+        @supervisor_flask.route('/robot/', methods=['GET'])
+        def __robot_check():
             try:
-                return flask.jsonify(
-                    requests.get(self.simulator_address).json())
+                return flask.jsonify(requests.get(self.robot_address).json())
             except Exception as e:
-                rospy.logerr("Supervisor failed to contact the simulator: %s" %
-                             e)
+                rospy.logerr("Supervisor failed to contact the robot: %s" % e)
                 flask.abort(500)
 
-        @supervisor_flask.route('/simulator/<command>', methods=['GET'])
-        def __simulator_get(command):
+        @supervisor_flask.route('/robot/<command>', methods=['GET'])
+        def __robot_get(command):
             try:
-                resp = self._query_simulator(command)
+                resp = self._query_robot(command)
                 if (resp.values()[0] and
                         command in ['next', 'reset', 'restart']):
                     self.environment_name = (
-                        self.config['environment_names'][self._query_simulator(
+                        self.config['environment_names'][self._query_robot(
                             'map_selection_number')['map_selection_number']])
                     self.environment_data[
                         self.environment_name]['trajectory_pose_next'] = 0
                 return resp
             except Exception as e:
                 rospy.logerr("Supervisor received the following error when "
-                             "issuing command '%s' to the simulator: %s" %
+                             "issuing command '%s' to the robot: %s" %
                              (command, e))
                 flask.abort(500)
 
@@ -356,7 +353,7 @@ class Supervisor(object):
         def __status_get(command):
             if self.environment_name is None:
                 self.environment_name = (
-                    self.config['environment_names'][self._query_simulator(
+                    self.config['environment_names'][self._query_robot(
                         'map_selection_number')['map_selection_number']])
             if command == 'is_finished':
                 return flask.jsonify({'is_finished': self._is_finished()})
