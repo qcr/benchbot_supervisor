@@ -17,12 +17,13 @@ _MOVE_HZ = 20
 _MOVE_TOL_DIST = 0.01
 _MOVE_TOL_YAW = np.deg2rad(1)
 
-# _MOVE_ANGLE_K = 3
-_MOVE_ANGLE_K = 0.6
+_MOVE_ANGLE_K = 3
 
 _MOVE_POSE_K_RHO = 1.5
 _MOVE_POSE_K_ALPHA = 7.5
 _MOVE_POSE_K_BETA = -3
+
+_MOVE_SPEED_FACTOR = 0.2
 
 
 def __ang_to_b(matrix_a, matrix_b):
@@ -143,7 +144,8 @@ def _move_to_angle(goal, publisher, supervisor):
             break
 
         # Construct & send velocity msg
-        vel_msg.angular.z = _MOVE_ANGLE_K * orientation_error
+        vel_msg.angular.z = (_MOVE_SPEED_FACTOR * _MOVE_ANGLE_K *
+                             orientation_error)
         publisher.publish(vel_msg)
         hz_rate.sleep()
     publisher.publish(Twist())
@@ -180,9 +182,10 @@ def _move_to_pose(goal, publisher, supervisor):
             break
 
         # Construct & send velocity msg
-        vel_msg.linear.x = (-1 if backwards else 1) * _MOVE_POSE_K_RHO * rho
-        vel_msg.angular.z = (_MOVE_POSE_K_ALPHA * alpha +
-                             _MOVE_POSE_K_BETA * beta)
+        vel_msg.linear.x = (_MOVE_SPEED_FACTOR * (-1 if backwards else 1) *
+                            _MOVE_POSE_K_RHO * rho)
+        vel_msg.angular.z = _MOVE_SPEED_FACTOR * (_MOVE_POSE_K_ALPHA * alpha +
+                                                  _MOVE_POSE_K_BETA * beta)
         publisher.publish(vel_msg)
         hz_rate.sleep()
     publisher.publish(Twist())
