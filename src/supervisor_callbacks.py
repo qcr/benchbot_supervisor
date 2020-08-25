@@ -124,7 +124,9 @@ def _debug_move(data, publisher, supervisor):
 def _current_pose(supervisor):
     # TODO REMOVE HARDCODED FRAME NAMES!!!
     return __tf_ros_stamped_to_tf_matrix(
-        supervisor.tf_buffer.lookup_transform('map', 'robot', rospy.Time()))
+        supervisor.tf_buffer.lookup_transform('map', 'base_link',
+                                              rospy.Time()))
+    # supervisor.tf_buffer.lookup_transform('map', 'robot', rospy.Time()))
 
 
 def _move_to_angle(goal, publisher, supervisor):
@@ -188,7 +190,8 @@ def _move_to_pose(goal, publisher, supervisor):
 def create_pose_list(data, supervisor):
     # TODO REMOVE HARDCODED TREE STRUCTURE!!!
     # TODO REMOVE HACK FOR FIXING CAMERA NAME!!!
-    HARDCODED_POSES = ['odom', 'robot', 'left_camera', 'lidar']
+    # HARDCODED_POSES = ['odom', 'robot', 'left_camera', 'lidar']
+    HARDCODED_POSES = ['odom', 'base_link', 'camera_front', 'laser']
     tfs = {
         p: __tf_ros_stamped_to_tf_matrix(
             supervisor.tf_buffer.lookup_transform('map', p, rospy.Time()))
