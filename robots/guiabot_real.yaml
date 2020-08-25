@@ -24,7 +24,7 @@ image_rgb_info:
   callback_api: "api_callbacks.decode_jsonpickle"
 laser:
   connection: "ros_to_api"
-  ros_topic: "/scan_merged"
+  ros_topic: "/scan_laser_fixed"
   ros_type: "sensor_msgs/LaserScan"
   callback_supervisor: "supervisor_callbacks.encode_laserscan"
   callback_api: "api_callbacks.decode_jsonpickle"
