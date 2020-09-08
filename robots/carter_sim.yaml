@@ -1,49 +1,51 @@
-image_depth:
-  connection: "ros_to_api"
-  ros_topic: "/camera/depth/image_raw"
-  ros_type: "sensor_msgs/Image"
-  callback_supervisor: "supervisor_callbacks.encode_depth_image"
-  callback_api: "api_callbacks.decode_jsonpickle"
-image_depth_info:
-  connection: "ros_to_api"
-  ros_topic: "/camera/depth/camera_info"
-  ros_type: "sensor_msgs/CameraInfo"
-  callback_supervisor: "supervisor_callbacks.encode_camera_info"
-  callback_api: "api_callbacks.decode_jsonpickle"
-image_rgb:
-  connection: "ros_to_api"
-  ros_topic: "/camera/color/image_raw"
-  ros_type: "sensor_msgs/Image"
-  callback_supervisor: "supervisor_callbacks.encode_color_image"
-  callback_api: "api_callbacks.decode_color_image"
-image_rgb_info:
-  connection: "ros_to_api"
-  ros_topic: "/camera/color/camera_info"
-  ros_type: "sensor_msgs/CameraInfo"
-  callback_supervisor: "supervisor_callbacks.encode_camera_info"
-  callback_api: "api_callbacks.decode_jsonpickle"
-laser:
-  connection: "ros_to_api"
-  ros_topic: "/scan_laser"
-  ros_type: "sensor_msgs/LaserScan"
-  callback_supervisor: "supervisor_callbacks.encode_laserscan"
-  callback_api: "api_callbacks.decode_jsonpickle"
-move_angle:
-  connection: "api_to_ros"
-  ros_topic: "/cmd_vel"
-  ros_type: "geometry_msgs/Twist"
-  callback_supervisor: "supervisor_callbacks.move_angle"
-move_distance:
-  connection: "api_to_ros"
-  ros_topic: "/cmd_vel"
-  ros_type: "geometry_msgs/Twist"
-  callback_supervisor: "supervisor_callbacks.move_distance"
-move_next:
-  connection: "api_to_ros"
-  ros_topic: "/cmd_vel"
-  ros_type: "geometry_msgs/Twist"
-  callback_supervisor: "supervisor_callbacks.move_next"
-poses:
-  connection: "ros_to_api"
-  callback_supervisor: "supervisor_callbacks.create_pose_list"
-  callback_api: "api_callbacks.decode_jsonpickle"
+address: benchbot_robot:10000
+connections:
+  image_depth:
+    connection: "ros_to_api"
+    ros_topic: "/camera/depth/image_raw"
+    ros_type: "sensor_msgs/Image"
+    callback_supervisor: "supervisor_callbacks.encode_depth_image"
+    callback_api: "api_callbacks.decode_jsonpickle"
+  image_depth_info:
+    connection: "ros_to_api"
+    ros_topic: "/camera/depth/camera_info"
+    ros_type: "sensor_msgs/CameraInfo"
+    callback_supervisor: "supervisor_callbacks.encode_camera_info"
+    callback_api: "api_callbacks.decode_jsonpickle"
+  image_rgb:
+    connection: "ros_to_api"
+    ros_topic: "/camera/color/image_raw"
+    ros_type: "sensor_msgs/Image"
+    callback_supervisor: "supervisor_callbacks.encode_color_image"
+    callback_api: "api_callbacks.decode_color_image"
+  image_rgb_info:
+    connection: "ros_to_api"
+    ros_topic: "/camera/color/camera_info"
+    ros_type: "sensor_msgs/CameraInfo"
+    callback_supervisor: "supervisor_callbacks.encode_camera_info"
+    callback_api: "api_callbacks.decode_jsonpickle"
+  laser:
+    connection: "ros_to_api"
+    ros_topic: "/scan_laser"
+    ros_type: "sensor_msgs/LaserScan"
+    callback_supervisor: "supervisor_callbacks.encode_laserscan"
+    callback_api: "api_callbacks.decode_jsonpickle"
+  move_angle:
+    connection: "api_to_ros"
+    ros_topic: "/cmd_vel"
+    ros_type: "geometry_msgs/Twist"
+    callback_supervisor: "supervisor_callbacks.move_angle"
+  move_distance:
+    connection: "api_to_ros"
+    ros_topic: "/cmd_vel"
+    ros_type: "geometry_msgs/Twist"
+    callback_supervisor: "supervisor_callbacks.move_distance"
+  move_next:
+    connection: "api_to_ros"
+    ros_topic: "/cmd_vel"
+    ros_type: "geometry_msgs/Twist"
+    callback_supervisor: "supervisor_callbacks.move_next"
+  poses:
+    connection: "ros_to_api"
+    callback_supervisor: "supervisor_callbacks.create_pose_list"
+    callback_api: "api_callbacks.decode_jsonpickle"

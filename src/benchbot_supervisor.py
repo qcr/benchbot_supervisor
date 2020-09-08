@@ -87,13 +87,6 @@ class Supervisor(object):
         self.environment_name = None  # Name of currently loaded environment
         self.config = None
 
-        # Ensure a usable robot address
-        self.robot_address = rospy.get_param("~robot_address", None)
-        if self.robot_address is None:
-            raise ValueError("ERROR: No address was received for the robot!")
-        elif not self.robot_address.startswith("http://"):
-            self.robot_address = 'http://' + self.robot_address
-
         # Current state
         self.connections = {}
         self.state = {}
@@ -265,16 +258,24 @@ class Supervisor(object):
                 self.environment_data[d['environment_name']] = d
                 self.config['environment_names'].append(d['environment_name'])
 
+        # Ensure we have a usable robot address
+        if 'address' not in self.config['robot']:
+            raise ValueError("ERROR: No address was received for the robot!")
+        elif not self.config['robot']['address'].startswith("http://"):
+            self.config['robot']['address'] = ('http://' +
+                                               self.config['robot']['address'])
+
         # Validate that we can satisfy all action & observation requests
         for x in self.config['actions'] + self.config['observations']:
-            if self.config['robot'] is None or x not in self.config['robot']:
+            if (self.config['robot']['connections'] is None or
+                    x not in self.config['robot']['connections']):
                 raise ValueError(
                     "An action / observation was defined using the connection '%s',"
                     " which was not declared for the robot in file '%s'" %
                     (x, self.robot_file))
 
         # Update ROS connections
-        for k, v in self.config['robot'].items():
+        for k, v in self.config['robot']['connections'].items():
             if 'connection' in v and v['connection'] in CONNS:
                 self._register_connection(k, v)
             else:
