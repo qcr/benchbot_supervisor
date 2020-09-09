@@ -8,6 +8,7 @@ import re
 import requests
 import rospkg
 import rospy
+import time
 import traceback
 import tf2_ros
 import threading
@@ -375,14 +376,24 @@ class Supervisor(object):
         signal.signal(signal.SIGQUIT, evt.set)
         signal.signal(signal.SIGTERM, evt.set)
 
-        # Run the server in a blocking manner until the Supervisor is closed
+        # Start the server & wait until the robot controller is contactable
         supervisor_server.start()
         print("\n\nSupervisor is now available @ '%s' ..." %
               self.supervisor_address)
-        print("Looking at address '%s' for a robot controller ..." %
+
+        print("\nWaiting until a robot controller is found @ '%s' ..." %
               self.config['robot']['address'])
-        self._query_robot('/')
+        connected = False
+        while not connected:
+            try:
+                self._query_robot('/')
+                connected = True
+            except:
+                pass
+            time.sleep(3)
         print("READY")
+
+        # Run the server in a blocking manner until the Supervisor is closed
         evt.wait()
         print("\n\nShutting down supervisor & exiting ...")
         supervisor_server.stop()
