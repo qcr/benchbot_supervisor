@@ -183,8 +183,8 @@ class Supervisor(object):
                          key)] = _open_yaml_file(getattr(self, key), key)
 
     def _query_robot(self, command):
-        return requests.get(self.robot_address +
-                            ('' if self.robot_address.endswith('/') else '/') +
+        return requests.get(self.config['robot']['address'] + (
+            '' if self.config['robot']['address'].endswith('/') else '/') +
                             command).json()
 
     def _register_connection(self, connection_name, connection_data):
@@ -327,7 +327,8 @@ class Supervisor(object):
         @supervisor_flask.route('/robot/', methods=['GET'])
         def __robot_check():
             try:
-                return flask.jsonify(requests.get(self.robot_address).json())
+                return flask.jsonify(
+                    requests.get(self.config['robot']['address']).json())
             except Exception as e:
                 rospy.logerr("Supervisor failed to contact the robot: %s" % e)
                 flask.abort(500)
@@ -378,6 +379,10 @@ class Supervisor(object):
         supervisor_server.start()
         print("\n\nSupervisor is now available @ '%s' ..." %
               self.supervisor_address)
+        print("Looking at address '%s' for a robot controller ..." %
+              self.config['robot']['address'])
+        self._query_robot('/')
+        print("READY")
         evt.wait()
         print("\n\nShutting down supervisor & exiting ...")
         supervisor_server.stop()
