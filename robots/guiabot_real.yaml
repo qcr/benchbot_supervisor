@@ -1,4 +1,4 @@
-address: guiabot
+address: guiabot:10000
 connections:
   image_depth:
     connection: "ros_to_api"
