@@ -183,10 +183,12 @@ class Supervisor(object):
             self.config[(key[:-5] if key.endswith('_file') else
                          key)] = _open_yaml_file(getattr(self, key), key)
 
-    def _query_robot(self, command):
-        return requests.get(self.config['robot']['address'] + (
-            '' if self.config['robot']['address'].endswith('/') else '/') +
-                            command).json()
+    def _robot(self, command, data=None):
+        return (requests.get if data is None else requests.post)(
+            re.sub('//$', '/', '%s/' % self.config['robot']['address']) +
+            command, **({} if data is None else {
+                'json': data
+            })).json()
 
     def _register_connection(self, connection_name, connection_data):
         # Pull out imported components from the connection data
@@ -328,8 +330,7 @@ class Supervisor(object):
         @supervisor_flask.route('/robot/', methods=['GET'])
         def __robot_check():
             try:
-                return flask.jsonify(
-                    requests.get(self.config['robot']['address']).json())
+                return flask.jsonify(self._robot('/'))
             except Exception as e:
                 rospy.logerr("Supervisor failed to contact the robot: %s" % e)
                 flask.abort(500)
@@ -337,11 +338,11 @@ class Supervisor(object):
         @supervisor_flask.route('/robot/<command>', methods=['GET'])
         def __robot_get(command):
             try:
-                resp = self._query_robot(command)
+                resp = self._robot(command)
                 if (resp.values()[0] and
                         command in ['next', 'reset', 'restart']):
                     self.environment_name = (
-                        self.config['environment_names'][self._query_robot(
+                        self.config['environment_names'][self._robot(
                             'map_selection_number')['map_selection_number']])
                     self.environment_data[
                         self.environment_name]['trajectory_pose_next'] = 0
@@ -356,7 +357,7 @@ class Supervisor(object):
         def __status_get(command):
             if self.environment_name is None:
                 self.environment_name = (
-                    self.config['environment_names'][self._query_robot(
+                    self.config['environment_names'][self._robot(
                         'map_selection_number')['map_selection_number']])
             if command == 'is_finished':
                 return flask.jsonify({'is_finished': self._is_finished()})
@@ -386,12 +387,14 @@ class Supervisor(object):
         connected = False
         while not connected:
             try:
-                self._query_robot('/')
+                self._robot('/')
                 connected = True
-            except:
+            except Exception as e:
+                print(e)
                 pass
             time.sleep(3)
-        print("READY")
+        print("\nFound. Sending config to controller ...")
+        self._robot('/configure', self.config)
 
         # Run the server in a blocking manner until the Supervisor is closed
         evt.wait()
