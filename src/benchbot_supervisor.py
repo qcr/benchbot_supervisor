@@ -392,9 +392,15 @@ class Supervisor(object):
             except Exception as e:
                 print(e)
                 pass
-            time.sleep(3)
-        print("\nFound. Sending config to controller ...")
-        self._robot('/configure', self.config)
+            time.sleep(1)
+        print(
+            "\nFound. Sending environment data & robot config to controller ..."
+        )
+        # TODO we need to ensure map file is loaded if sending to a remote!
+        self._robot('/configure', {
+            'environments': self.environment_data,
+            'robot': self.config['robot']
+        })
 
         # Run the server in a blocking manner until the Supervisor is closed
         evt.wait()
