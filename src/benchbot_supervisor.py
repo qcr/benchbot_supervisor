@@ -255,9 +255,10 @@ class Supervisor(object):
         if self.environment_files is not None:
             self.environment_data = {}
             self.config['environment_names'] = []
-            for f in self.environment_files:
+            for i, f in enumerate(self.environment_files):
                 with open(f, 'r') as fd:
                     d = yaml.safe_load(fd)
+                d['order'] = i
                 self.environment_data[d['environment_name']] = d
                 self.config['environment_names'].append(d['environment_name'])
 
