@@ -134,7 +134,7 @@ def _move_to_angle(goal, publisher, supervisor):
     # Servo until orientation matches that of the requested goal
     vel_msg = Twist()
     hz_rate = rospy.Rate(_MOVE_HZ)
-    while not supervisor._query_robot('is_collided')['is_collided']:
+    while not supervisor._robot('is_collided')['is_collided']:
         # Get latest orientation error
         orientation_error = __yaw_b_wrt_a(_current_pose(supervisor), goal)
 
@@ -159,7 +159,7 @@ def _move_to_pose(goal, publisher, supervisor):
     # beta = angle between current yaw & desired yaw
     vel_msg = Twist()
     hz_rate = rospy.Rate(_MOVE_HZ)
-    while not supervisor._query_robot('is_collided')['is_collided']:
+    while not supervisor._robot('is_collided')['is_collided']:
         # Get latest position error
         current = _current_pose(supervisor)
         rho = __dist_from_a_to_b(current, goal)
@@ -269,9 +269,8 @@ def move_distance(data, publisher, supervisor):
 def move_next(data, publisher, supervisor):
     # Configure if this is our first step
     if supervisor.environment_name is None:
-        supervisor.environment_name = (
-            supervisor.config['environment_names'][supervisor._query_robot(
-                'map_selection_number')['map_selection_number']])
+        supervisor.environment_name = (supervisor.config['environment_names'][
+            supervisor._robot('map_selection_number')['map_selection_number']])
     if ('trajectory_pose_next' not in supervisor.environment_data[
             supervisor.environment_name]):
         supervisor.environment_data[
