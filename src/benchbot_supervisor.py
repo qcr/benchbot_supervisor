@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 from copy import deepcopy
 import flask
 from gevent import event, pywsgi, signal
@@ -8,6 +10,7 @@ import re
 import requests
 import rospkg
 import rospy
+import sys
 import time
 import traceback
 import tf2_ros
@@ -388,8 +391,10 @@ class Supervisor(object):
         print("\n\nSupervisor is now available @ '%s' ..." %
               self.supervisor_address)
 
-        print("\nWaiting until a robot controller is found @ '%s' ..." %
-              self.config['robot']['address'])
+        print("\nWaiting until a robot controller is found @ '%s' ... " %
+              self.config['robot']['address'],
+              end='')
+        sys.stdout.flush()
         connected = False
         while not connected:
             try:
@@ -399,14 +404,17 @@ class Supervisor(object):
                 print(e)
                 pass
             time.sleep(1)
-        print(
-            "\nFound. Sending environment data & robot config to controller ..."
-        )
+        print("Found")
+
         # TODO we need to ensure map file is loaded if sending to a remote!
+        print("\nSending environment data & robot config to controller ... ",
+              end='')
+        sys.stdout.flush()
         self._robot('/configure', {
             'environments': self.environment_data,
             'robot': self.config['robot']
         })
+        print("Ready")
 
         # Run the server in a blocking manner until the Supervisor is closed
         evt.wait()
