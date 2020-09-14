@@ -259,6 +259,7 @@ class Supervisor(object):
                 with open(f, 'r') as fd:
                     d = yaml.safe_load(fd)
                 d['order'] = i
+                d['path'] = f
                 self.environment_data[d['environment_name']] = d
                 self.config['environment_names'].append(d['environment_name'])
         if 'start_cmds' in self.config['robot']:
