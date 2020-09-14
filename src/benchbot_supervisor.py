@@ -414,7 +414,7 @@ class Supervisor(object):
             'environments': self.environment_data,
             'robot': self.config['robot']
         })
-        print("Ready")
+        print("Ready\n")
 
         # Run the server in a blocking manner until the Supervisor is closed
         evt.wait()

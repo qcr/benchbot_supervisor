@@ -1,4 +1,11 @@
 address: benchbot_robot:10000
+global_frame: map
+poses:
+  - odom
+  - robot
+  - left_camera
+  - lidar
+robot_frame: robot
 start_cmds:
   - >
     sed -i "0,/\"pose\":/{s/\(\"pose\": \)\(.*\)/\1$START_POSE/}"

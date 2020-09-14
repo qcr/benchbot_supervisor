@@ -1,4 +1,11 @@
 address: guiabot:10000
+global_frame: map
+poses:
+  - odom
+  - base_link
+  - camera_front
+  - laser
+robot_frame: base_link
 connections:
   image_depth:
     connection: "ros_to_api"
