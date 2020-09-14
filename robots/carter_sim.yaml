@@ -7,6 +7,8 @@ start_cmds:
     ../IsaacSimProject.sh "$MAP_PATH" -isaac_sim_config_json=
     "$ISAAC_PATH/apps/carter/carter_sim/bridge_config/carter_full.json"
     -windowed -ResX=960 -ResY=540 -vulkan -game
+  - >
+    cd "$SIM_PATH" && ./bazelros run //apps/benchbot_simulator
 connections:
   image_depth:
     connection: "ros_to_api"
