@@ -23,7 +23,8 @@ _MOVE_POSE_K_RHO = 1.5
 _MOVE_POSE_K_ALPHA = 7.5
 _MOVE_POSE_K_BETA = -3
 
-_MOVE_SPEED_FACTOR = 0.2
+# TODO move this into robot controller
+_MOVE_SPEED_FACTOR = 1
 
 
 def __ang_to_b(matrix_a, matrix_b):
