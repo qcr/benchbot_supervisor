@@ -4,7 +4,7 @@ start_cmds:
     sed -i "0,/\"pose\":/{s/\(\"pose\": \)\(.*\)/\1$START_POSE/}"
     $ISAAC_PATH/apps/carter/carter_sim/bridge_config/carter_full_config.json &&
     cd "$ENVS_PATH" &&
-    ./IsaacSimProject.sh "$MAP_PATH" -isaac_sim_config_json=
+    ../IsaacSimProject.sh "$MAP_PATH" -isaac_sim_config_json=
     "$ISAAC_PATH/apps/carter/carter_sim/bridge_config/carter_full.json"
     -windowed -ResX=960 -ResY=540 -vulkan -game
 connections:
