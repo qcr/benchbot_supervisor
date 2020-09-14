@@ -261,6 +261,10 @@ class Supervisor(object):
                 d['order'] = i
                 self.environment_data[d['environment_name']] = d
                 self.config['environment_names'].append(d['environment_name'])
+        if 'start_cmds' in self.config['robot']:
+            self.config['robot']['start_cmds'] = [
+                c.strip() for c in self.config['robot']['start_cmds']
+            ]
 
         # Ensure we have a usable robot address
         if 'address' not in self.config['robot']:
