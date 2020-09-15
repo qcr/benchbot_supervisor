@@ -286,9 +286,11 @@ class Supervisor(object):
                     " which was not declared for the robot in file '%s'" %
                     (x, self.robot_file))
 
-        # Update ROS connections
+        # Update ROS connections (note we don't bother registering connections
+        # for 'api_to_ros' connections as they are handled in the controller)
         for k, v in self.config['robot']['connections'].items():
-            if 'connection' in v and v['connection'] in CONNS:
+            if ('connection' in v and v['connection'] != CONN_API_TO_ROS and
+                    v['connection'] in CONNS):
                 self._register_connection(k, v)
             else:
                 raise ValueError(
@@ -321,16 +323,20 @@ class Supervisor(object):
             # TODO there needs to be better error checking for when no message
             # has been received on a ROS topic!!! (at the moment all we get is
             # an unhelpful null & success...)
-            if connection not in self.connections:
-                rospy.logerr("Requested non-existent connection: %s" %
-                             connection)
+            if connection not in self.config['robot']['connections']:
+                rospy.logerr("Requested undefined connection: %s" % connection)
                 flask.abort(404)
             try:
-                return flask.jsonify(
-                    _to_simple_dict(
-                        self._call_connection(
-                            connection,
-                            data=flask.request.get_json(silent=True))))
+                if (self.config['robot']['connections'][connection]
+                    ['connection'] == CONN_API_TO_ROS):
+                    return flas.jsonify(
+                        self._robot('/connections/%s' % connection))
+                else:
+                    return flask.jsonify(
+                        _to_simple_dict(
+                            self._call_connection(
+                                connection,
+                                data=flask.request.get_json(silent=True))))
             except Exception as e:
                 rospy.logerr("Supervisor failed on processing connection "
                              "'%s' with error:\n%s" % (connection, repr(e)))
