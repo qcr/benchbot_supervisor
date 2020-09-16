@@ -1,9 +1,7 @@
 from __future__ import print_function
 
-from copy import deepcopy
 import flask
 from gevent import event, pywsgi, signal
-import importlib
 import os
 import pprint
 import re
@@ -13,8 +11,6 @@ import rospy
 import sys
 import time
 import traceback
-import tf2_ros
-import threading
 import yaml
 
 _PACKAGE_NAME = "benchbot_supervisor"
@@ -75,8 +71,6 @@ class Supervisor(object):
 
         # Current state
         self.state = {}
-        self.tf_buffer = tf2_ros.Buffer()
-        self._tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
         # Configure the Supervisor with provided arguments
         print("Configuring the supervisor...")
