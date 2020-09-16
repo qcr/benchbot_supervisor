@@ -21,6 +21,7 @@ connections:
     connection: "ros_to_api"
     ros_topic: "/camera_front/color/image_rect_color"
     ros_type: "sensor_msgs/Image"
+    callback_api: "api_callbacks.convert_to_rgb"
     callback_robot: "robot_callbacks.encode_color_image"
   image_rgb_info:
     connection: "ros_to_api"
