@@ -21,12 +21,6 @@ _PACKAGE_NAME = "benchbot_supervisor"
 
 _SUPERVISOR_PORT = 10000
 
-CONN_API_TO_ROS = 'api_to_ros'
-CONN_ROS_TO_API = 'ros_to_api'
-CONN_ROSCACHE_TO_API = 'roscache_to_api'
-
-CONNS = [CONN_API_TO_ROS, CONN_ROS_TO_API, CONN_ROSCACHE_TO_API]
-
 
 def _merge_dicts(dict_1, dict_2):
     # Note: duplicate keys in dict_2 will overwrite dict_1
@@ -53,19 +47,6 @@ def _open_yaml_file(filename, key=None):
         return yaml.safe_load(f)
 
 
-def _to_simple_dict(data):
-    out = {}
-    if hasattr(data, '__slots__'):
-        for k in data.__slots__:
-            if hasattr(getattr(data, k), '__slots__'):
-                out[k] = _to_simple_dict(getattr(data, k))
-            else:
-                out[k] = getattr(data, k)
-    else:
-        out = data
-    return out
-
-
 # TODO: this does not clean up ROS publishers / subscribers properly. Will need
 # to do this if configurations plan to be changed dynamically
 class Supervisor(object):
@@ -79,6 +60,7 @@ class Supervisor(object):
 
     def __init__(self, port=_SUPERVISOR_PORT):
         print("Initialising supervisor...")
+
         # Configuration parameters
         self.supervisor_address = 'http://0.0.0.0:' + str(port)
         self.task_file = None
@@ -92,7 +74,6 @@ class Supervisor(object):
         self.config = None
 
         # Current state
-        self.connections = {}
         self.state = {}
         self.tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self.tf_buffer)
@@ -106,70 +87,6 @@ class Supervisor(object):
             actions_file=rospy.get_param("~actions_file", None),
             observations_file=rospy.get_param("~observations_file", None),
             environment_files=rospy.get_param("~environment_files", None))
-
-    @staticmethod
-    def _attempt_connection_imports(connection_data):
-        topic_class = None
-        if 'ros_type' in connection_data:
-            x = connection_data['ros_type'].split('/')
-            topic_class = getattr(importlib.import_module(x[0] + '.msg'), x[1])
-
-        callback_supervisor_fn = None
-        if 'callback_supervisor' in connection_data:
-            callback_supervisor_fn = Supervisor._dynamic_callback_import(
-                connection_data['callback_supervisor'])
-
-        callback_caching_fn = None
-        if 'callback_caching' in connection_data:
-            callback_caching_fn = Supervisor._dynamic_callback_import(
-                connection_data['callback_caching'])
-
-        return (topic_class, callback_supervisor_fn, callback_caching_fn)
-
-    @staticmethod
-    def _dynamic_callback_import(callback_string):
-        x = callback_string.rsplit('.', 1)
-        return getattr(importlib.import_module(x[0]), x[1])
-
-    def _call_connection(self, connection_name, data=None):
-        if (self.connections[connection_name]['type'] in [
-                CONN_ROS_TO_API, CONN_ROSCACHE_TO_API
-        ]):
-            # Overwrite the data because it is an observation (data should be
-            # none anyway with an observation as we do not 'parameterise' an
-            # observation)
-            self.connections[connection_name]['condition'].acquire()
-            data = deepcopy(self.connections[connection_name]['data'])
-            self.connections[connection_name]['condition'].release()
-
-            return (data
-                    if self.connections[connection_name]['callback_supervisor']
-                    is None else
-                    self.connections[connection_name]['callback_supervisor'](
-                        data, self))
-        elif self.connections[connection_name]['type'] == CONN_API_TO_ROS:
-            if self.connections[connection_name]['callback_supervisor'] is None:
-                self.connections[connection_name]['ros'].publish(data)
-            else:
-                self.connections[connection_name]['callback_supervisor'](
-                    data, self.connections[connection_name]['ros'], self)
-        else:
-            print("UNIMPLEMENTED CONNECTION CALL: %s" %
-                  self.connections[connection_name]['type'])
-
-    def _generate_subscriber_callback(self, connection_name):
-
-        def __cb(data):
-            if (self.connections[connection_name]['type'] ==
-                    CONN_ROSCACHE_TO_API):
-                data = self.connections[connection_name]['callback_caching'](
-                    data, self.connections[connection_name]['data'])
-            self.connections[connection_name]['condition'].acquire()
-            self.connections[connection_name]['data'] = data
-            self.connections[connection_name]['condition'].notify()
-            self.connections[connection_name]['condition'].release()
-
-        return __cb
 
     def _is_finished(self):
         return (False if 'trajectory_pose_next' not in self.environment_data[
@@ -192,36 +109,6 @@ class Supervisor(object):
             command, **({} if data is None else {
                 'json': data
             })).json()
-
-    def _register_connection(self, connection_name, connection_data):
-        # Pull out imported components from the connection data
-        topic_class, callback_supervisor_fn, callback_caching_fn = (
-            Supervisor._attempt_connection_imports(connection_data))
-
-        # Register the connection with the supervisor
-        self.connections[connection_name] = {
-            'type': connection_data['connection'],
-            'callback_supervisor': callback_supervisor_fn,
-            'callback_caching': callback_caching_fn,
-            'ros': None,
-            'data': None,
-            'condition': threading.Condition()
-        }
-
-        # Construct connections if possible
-        if topic_class != None:
-            if connection_data['connection'] in [
-                    CONN_ROS_TO_API, CONN_ROSCACHE_TO_API
-            ]:
-                self.connections[connection_name]['ros'] = rospy.Subscriber(
-                    connection_data['ros_topic'], topic_class,
-                    self._generate_subscriber_callback(connection_name))
-            elif connection_data['connection'] == CONN_API_TO_ROS:
-                self.connections[connection_name]['ros'] = rospy.Publisher(
-                    connection_data['ros_topic'], topic_class, queue_size=1)
-            else:
-                print("UNIMPLEMENTED POST CONNECTION: %s" %
-                      connection_data['connection'])
 
     def configure(self,
                   task_file=None,
@@ -286,18 +173,6 @@ class Supervisor(object):
                     " which was not declared for the robot in file '%s'" %
                     (x, self.robot_file))
 
-        # Update ROS connections (note we don't bother registering connections
-        # for 'api_to_ros' connections as they are handled in the controller)
-        for k, v in self.config['robot']['connections'].items():
-            if ('connection' in v and v['connection'] != CONN_API_TO_ROS and
-                    v['connection'] in CONNS):
-                self._register_connection(k, v)
-            else:
-                raise ValueError(
-                    "Robot connection definition %s has "
-                    "unsupported connection type: %s" %
-                    (k, v['connection'] if 'connection' in v else None))
-
     def run(self):
         # Setup all of the supervisor managament functions
         supervisor_flask = flask.Flask(__name__)
@@ -327,16 +202,8 @@ class Supervisor(object):
                 rospy.logerr("Requested undefined connection: %s" % connection)
                 flask.abort(404)
             try:
-                if (self.config['robot']['connections'][connection]
-                    ['connection'] == CONN_API_TO_ROS):
-                    return flas.jsonify(
-                        self._robot('/connections/%s' % connection))
-                else:
-                    return flask.jsonify(
-                        _to_simple_dict(
-                            self._call_connection(
-                                connection,
-                                data=flask.request.get_json(silent=True))))
+                return flask.jsonify(
+                    self._robot('/connections/%s' % connection))
             except Exception as e:
                 rospy.logerr("Supervisor failed on processing connection "
                              "'%s' with error:\n%s" % (connection, repr(e)))
