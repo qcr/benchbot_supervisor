@@ -66,7 +66,6 @@ class Supervisor(object):
         self.observations_file = None
         self.environment_files = None
         self.environment_data = None
-        self.environment_name = None  # Name of currently loaded environment
         self.config = None
 
         # Current state
@@ -213,35 +212,12 @@ class Supervisor(object):
         @supervisor_flask.route('/robot/<command>', methods=['GET'])
         def __robot_get(command):
             try:
-                resp = self._robot(command)
-                if (resp.values()[0] and
-                        command in ['next', 'reset', 'restart']):
-                    self.environment_name = (
-                        self.config['environment_names'][self._robot(
-                            'map_selection_number')['map_selection_number']])
-                    self.environment_data[
-                        self.environment_name]['trajectory_pose_next'] = 0
-                return resp
+                return self._robot(command)
             except Exception as e:
                 rospy.logerr("Supervisor received the following error when "
                              "issuing command '%s' to the robot: %s" %
                              (command, e))
                 flask.abort(500)
-
-        @supervisor_flask.route('/status/<command>', methods=['GET'])
-        def __status_get(command):
-            if self.environment_name is None:
-                self.environment_name = (
-                    self.config['environment_names'][self._robot(
-                        'map_selection_number')['map_selection_number']])
-            if command == 'is_finished':
-                return flask.jsonify({'is_finished': self._is_finished()})
-            elif command == 'environment_name':
-                return flask.jsonify(
-                    {'environment_name': self.environment_name})
-            else:
-                rospy.logerr("Requested non-existent status: %s" % command)
-                flask.abort(404)
 
         # Configure our server
         supervisor_server = pywsgi.WSGIServer(
