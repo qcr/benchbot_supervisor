@@ -81,13 +81,6 @@ class Supervisor(object):
             observations_file=rospy.get_param("~observations_file", None),
             environment_files=rospy.get_param("~environment_files", None))
 
-    def _is_finished(self):
-        return (False if 'trajectory_pose_next' not in self.environment_data[
-            self.environment_name] else
-                self.environment_data[self.environment_name]
-                ['trajectory_pose_next'] >= len(self.environment_data[
-                    self.environment_name]['trajectory_poses']))
-
     def _load_config_from_file(self, key):
         # Bit rough... but eh... that's why its hidden
         if self.config is None:
