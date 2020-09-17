@@ -247,7 +247,6 @@ class Supervisor(object):
                 self._robot('/')
                 connected = True
             except Exception as e:
-                print(e)
                 pass
             time.sleep(1)
         print("Found")
