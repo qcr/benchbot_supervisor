@@ -186,7 +186,8 @@ class Supervisor(object):
                 rospy.logerr("Requested non-existent config: %s" % config)
                 flask.abort(404)
 
-        @supervisor_flask.route('/connections/<connection>', methods=['GET'])
+        @supervisor_flask.route('/connections/<connection>',
+                                methods=['GET', 'POST'])
         def __connection_get(connection):
             # TODO there needs to be better error checking for when no message
             # has been received on a ROS topic!!! (at the moment all we get is
@@ -195,7 +196,10 @@ class Supervisor(object):
                 rospy.logerr("Requested undefined connection: %s" % connection)
                 flask.abort(404)
             try:
-                return self._robot('/connections/%s' % connection)
+                return self._robot(
+                    '/connections/%s' % connection,
+                    data=(flask.request.get_json()
+                          if flask.request.method == 'POST' else None))
             except Exception as e:
                 rospy.logerr("Supervisor failed on processing connection "
                              "'%s' with error:\n%s" % (connection, repr(e)))
