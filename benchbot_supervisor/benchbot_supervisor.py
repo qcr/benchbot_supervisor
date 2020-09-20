@@ -10,7 +10,7 @@ import sys
 import time
 import yaml
 
-_SUPERVISOR_PORT = 10000
+DEFAULT_PORT = 10000
 
 
 def _merge_dicts(dict_1, dict_2):
@@ -49,7 +49,7 @@ class Supervisor(object):
     }
 
     def __init__(self,
-                 port=_SUPERVISOR_PORT,
+                 port=DEFAULT_PORT,
                  task_file=None,
                  task_name=None,
                  robot_file=None,

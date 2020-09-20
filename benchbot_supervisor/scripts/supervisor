@@ -2,12 +2,14 @@
 
 import argparse
 
-from benchbot_supervisor import Supervisor
+from benchbot_supervisor import Supervisor, DEFAULT_PORT
 
 if __name__ == '__main__':
     # Parse all supported arguments
     p = argparse.ArgumentParser(description="Runs the BenchBot Supervisor.")
-    p.add_argument('--port', help="Supervisor port number (default: 10000)")
+    p.add_argument('--port',
+                   help="Supervisor port number (default: 10000)",
+                   default=DEFAULT_PORT)
     p.add_argument('--task-name', help="Name of task")
     p.add_argument(
         '--task-file',
@@ -23,8 +25,13 @@ if __name__ == '__main__':
         "Colon separated list of files containing selected environment metadata"
     )
     args = p.parse_args()
-    print(args)
 
     # Start the supervisor
-    # s = Supervisor()
-    # s.run()
+    s = Supervisor(port=args.port,
+                   task_file=args.task_file,
+                   task_name=args.task_name,
+                   robot_file=args.robot_file,
+                   actions_file=args.actions_file,
+                   observations_file=args.observations_file,
+                   environment_files=args.environment_files)
+    s.run()
