@@ -24,6 +24,13 @@ s = Supervisor(...args...)
 s.run()
 ```
 
+A run script is also provided in the package to facilitate easy passing of arguments from the command line:
+
+```
+u@pc:~$ python -m benchbot_supervisor supervisor ...args...
+```
+
+
 The following parameters are typically required for a useful instantiation of the supervisor:
 
 - **task_name**: string describing the requested task (format is `'type:control_mode:localisation_mode'`)
