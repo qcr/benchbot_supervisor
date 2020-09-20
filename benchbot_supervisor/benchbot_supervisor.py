@@ -8,7 +8,6 @@ import re
 import requests
 import sys
 import time
-import traceback
 import yaml
 
 _SUPERVISOR_PORT = 10000
