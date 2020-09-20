@@ -11,8 +11,10 @@ setup(
     description='The BenchBot Supervisor, used in the BenchBot Software Stack',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    packages=find_packages(),
+    packages=find_packages('src'),
+    package_dir={'': 'src'},
     package_data={'benchbot_supervisor': ['*/*.yaml']},
+    scripts=['scripts/supervisor'],
     install_requires=['flask', 'gevent', 'pyyaml', 'requests'],
     classifiers=(
         "Programming Language :: Python :: 2",

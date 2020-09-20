@@ -4,22 +4,24 @@
 
 <p align="center"><img alt="benchbot_supervisor" src="./docs/benchbot_supervisor.jpg"/></p>
 
-The BenchBot Supervisor is a HTTP server facilitating communication between user-facing interfaces like the [BenchBot API](https://github.com/roboticvisionorg/benchbot_api), & the low-level robot components like [BenchBot Simulator](https://github.com/roboticvisionorg/benchbot_simulator) or real robots. Communication is typically routed through a [BenchBot Robot Controller](https://github.com/RoboticVisionOrg/benchbot_robot_controller), which provides automated process management for low-level components and wraps ROS communications.
+The BenchBot Supervisor is a HTTP server facilitating communication between user-facing interfaces like the [BenchBot API](https://github.com/roboticvisionorg/benchbot_api), & the low-level robot components like [BenchBot Simulator](https://github.com/roboticvisionorg/benchbot_simulator) or real robots. Communication is typically routed through a [BenchBot Robot Controller](https://github.com/RoboticVisionOrg/benchbot_robot_controller), which provides automated process management for low-level components and wraps all ROS communications.
 
 ## Installing & running the BenchBot Supervisor
 
-BenchBot Supervisor is a ROS package: it contains a ROS node which communicates downstream to low-level components, & contains a HTTP server for upstream communication. The package is installed like any other ROS package:
+BenchBot Supervisor is a Python package consisting of a class wrapping a HTTP server for both upstream and downstream communication. The package is installed like any other Python package:
 
 ```
 u@pc:~$ git clone https://github.com/roboticvisionorg/benchbot_supervisor
-u@pc:~$ ln -sv "$(pwd)/benchbot_supervisor" <CATKIN_WS>/src/
-u@pc:~$ cd <CATKIN_WS> && catkin_make
+u@pc:~$ cd benchbot_supervisor && pip install .
 ```
 
-Once installed, the ROS node is run via:
+Once installed, the Python class can be used as follows:
 
-```
-u@pc:~$ rosrun benchbot_supervisor benchbot_supervisor
+```python
+from benchbot_supervisor import Supervisor
+
+s = Supervisor(...args...)
+s.run()
 ```
 
 The following parameters are typically required for a useful instantiation of the supervisor:
