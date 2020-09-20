@@ -2,9 +2,9 @@
 
 # BenchBot Supervisor
 
-<p align="center"><img alt="benchbot_supervisor" src="./docs/benchbot_supervisor.png"/></p>
+<p align="center"><img alt="benchbot_supervisor" src="./docs/benchbot_supervisor.jpg"/></p>
 
-The BenchBot Supervisor is a HTTP server facilitating communication between user-facing interfaces like the [BenchBot API](https://github.com/roboticvisionorg/benchbot_api), & the low-level ROS components of simulators like [BenchBot Simulator](https://github.com/roboticvisionorg/benchbot_simulator) or real robots.
+The BenchBot Supervisor is a HTTP server facilitating communication between user-facing interfaces like the [BenchBot API](https://github.com/roboticvisionorg/benchbot_api), & the low-level robot components like [BenchBot Simulator](https://github.com/roboticvisionorg/benchbot_simulator) or real robots. Communication is typically routed through a [BenchBot Robot Controller](https://github.com/RoboticVisionOrg/benchbot_robot_controller), which provides automated process management for low-level components and wraps ROS communications.
 
 ## Installing & running the BenchBot Supervisor
 
@@ -106,7 +106,5 @@ The supervisor includes a RESTful API for all interaction with a user-facing API
 | `/config/`    | <pre>{<br> ...<br> 'param_name': param_value,<br> ...<br>}</pre> | Dictionary containing containing parameter values for all of supervisor configuration settings. Keys correspond to parameter name, & values to parameter value. |
 | `/config/<config>` | `config_value` | Directly retrieve the value of a supervisor configuration parameter with name `'config'`. Returns `param_value` of `'config'`. |
 | `/connections/<connection>` | `dict` | Returns the response of the connection (e.g. an `image_rgb` connection would return the image) as a `dict`. Format & style of the `dict` is defined by the methods described above in "Defining environment, robot, & task configurations". |
-| `/simulator/` | <pre>Hello, I am the BenchBot simulator</pre> | Arbitrary response confirming a simulator manager is available. |
-| `/simulator/<command>` | `dict` | Passes the command `command` down to a running simulator manager. See [BenchBot Simulator](https://github.com/roboticvisionorg/benchbot_simulator) for documentation of supported commands & expected responses. |
-| `/status/is_finished` | <pre>{'is_finished': True\|False}</pre> | Returns whether the simulator has finished stepping through the current scene (i.e. does not have a next pose to traverse towards). |
-| `/status/environment_name` | <pre>{'environment_name': string}</pre> | Returns the name of the current environment in the format `'name_number'` (e.g. `'miniroom_1'`).
+| `/robot/` | <pre>Hello, I am the BenchBot robot controller</pre> | Arbitrary response confirming a robot controller is available. |
+| `/robot/<command>` | `dict` | Passes the command `command` down to a running robot controller manager. See [BenchBot Robot Controller](https://github.com/roboticvisionorg/benchbot_robot_controller) for documentation of supported commands & expected responses. |
