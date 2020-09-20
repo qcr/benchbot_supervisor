@@ -2,24 +2,26 @@
 
 # BenchBot Supervisor
 
-<p align="center"><img alt="benchbot_supervisor" src="./docs/benchbot_supervisor.png"/></p>
+<p align="center"><img alt="benchbot_supervisor" src="./docs/benchbot_supervisor.jpg"/></p>
 
-The BenchBot Supervisor is a HTTP server facilitating communication between user-facing interfaces like the [BenchBot API](https://github.com/roboticvisionorg/benchbot_api), & the low-level ROS components of simulators like [BenchBot Simulator](https://github.com/roboticvisionorg/benchbot_simulator) or real robots.
+The BenchBot Supervisor is a HTTP server facilitating communication between user-facing interfaces like the [BenchBot API](https://github.com/roboticvisionorg/benchbot_api), & the low-level robot components like [BenchBot Simulator](https://github.com/roboticvisionorg/benchbot_simulator) or real robots. Communication is typically routed through a [BenchBot Robot Controller](https://github.com/RoboticVisionOrg/benchbot_robot_controller), which provides automated process management for low-level components and wraps all ROS communications.
 
 ## Installing & running the BenchBot Supervisor
 
-BenchBot Supervisor is a ROS package: it contains a ROS node which communicates downstream to low-level components, & contains a HTTP server for upstream communication. The package is installed like any other ROS package:
+BenchBot Supervisor is a Python package containing a `Supervisor` class that wraps a HTTP server for both upstream and downstream communication. The package is installed like any other Python package:
 
 ```
 u@pc:~$ git clone https://github.com/roboticvisionorg/benchbot_supervisor
-u@pc:~$ ln -sv "$(pwd)/benchbot_supervisor" <CATKIN_WS>/src/
-u@pc:~$ cd <CATKIN_WS> && catkin_make
+u@pc:~$ cd benchbot_supervisor && pip install .
 ```
 
-Once installed, the ROS node is run via:
+Once installed, the Python class can be used as follows:
 
-```
-u@pc:~$ rosrun benchbot_supervisor benchbot_supervisor
+```python
+from benchbot_supervisor import Supervisor
+
+s = Supervisor(...args...)
+s.run()
 ```
 
 The following parameters are typically required for a useful instantiation of the supervisor:
@@ -31,16 +33,21 @@ The following parameters are typically required for a useful instantiation of th
 - **environment_files**: colon separated list of filenames pointing to the environment metadata file of each environment intended to be run
 - **simulator_address**: address of a running simulator controller (e.g. `'benchbot_simulator:10000'`)
 
-As an example, the below command runs the supervisor for a scene change detection task, where active control is employed with ground truth localisation on a Carter robot, & environment miniroom:1:5 is used (a simulator is also available at address `'benchbot_simulator:10000'`):
+The module can also be directly executed, making passing of arguments from the command line simple (see `python -m benchbot_supervisor --help` for argument details):
 
 ```
-u@pc:~$ rosrun benchbot_supervisor benchbot_supervisor \
-    _task_name:='scd:active:ground_truth' \
-    _robot_file:='carter.yaml' \
-    _observations_file:='ground_truth.yaml' \
-    _actions_file:='active.yaml' \
-    _environment_files:='<envs_dir>/miniroom_1.yaml:<envs_dir>/miniroom_5.yaml' \
-    _simulator_address:='benchbot_simulator:10000'
+u@pc:~$ python -m benchbot_supervisor supervisor ...args...
+```
+
+As an example, the below command runs the supervisor for a scene change detection task, where active control is employed with ground truth localisation on a simulated Carter robot, & environment miniroom:1:5 is used:
+
+```
+u@pc:~$ python -m benchbot_supervisor \
+    --task-name 'scd:active:ground_truth' \
+    --robot-file 'carter_sim.yaml' \
+    --observations-file 'ground_truth.yaml' \
+    --actions-file 'active.yaml' \
+    --environment-files '<envs_dir>/miniroom_1.yaml:<envs_dir>/miniroom_5.yaml' \
 ```
 
 ## Employing environment, robot, & task configurations
@@ -53,31 +60,31 @@ Environment configurations are created upon the creation of each environment, & 
 
 ### Defining robot configurations
 
-The BenchBot Supervisor defines a robot as a series of directional "connections" either passing data from the robot up through the supervisor, or down through the supervisor to the robot. The snippet below for the Carter robot shows an example of both types of connection:
+The BenchBot Supervisor defines a robot primarily as a series of directional "connections" either passing data from the robot up through the supervisor, or down through the supervisor to the robot. The snippet below for the Carter robot shows an example of both types of connection:
 ```yaml
 # ./robots/carter.yaml
 
 ...
-image_rgb:
-  connection: "ros_to_api"
-  ros_topic: "/camera/color/image_raw"
-  ros_type: "sensor_msgs/Image"
-  callback_supervisor: "supervisor_callbacks.encode_color_image"
-  callback_api: "api_callbacks.decode_color_image"
-...
-move_distance:
-  connection: "api_to_ros"
-  ros_topic: "/cmd_vel"
-  ros_type: "geometry_msgs/Twist"
-  callback_supervisor: "supervisor_callbacks.move_distance"
+connections:
+  image_rgb:
+    connection: "ros_to_api"
+    ros_topic: "/camera/color/image_raw"
+    ros_type: "sensor_msgs/Image"
+    callback_robot: "robot_callbacks.encode_color_image"
+    callback_api: "api_callbacks.decode_color_image"
+  move_distance:
+    connection: "api_to_ros"
+    ros_topic: "/cmd_vel"
+    ros_type: "geometry_msgs/Twist"
+    callback_robot: "robot_callbacks.move_distance"
 ...
 ```
-The connection `image_rgb` passes an image from the robot up towards the BenchBot API, whereas the `move_distance` connection passes a movement command  from the API down to the robot. Callback definitions are used to handle the conversion process between ROS data, HTTP data, & the simple data required in the API. All callbacks are defined by a string which Python will dynamically attempt to import. For example, `'supervisor_callbacks.move_distance'` would be translated to:
+The connection `image_rgb` passes an image from the robot up towards the BenchBot API, whereas the `move_distance` connection passes a movement command  from the API down to the robot. Callback definitions are used to handle the conversion process between ROS data, HTTP data, & the simple data required in the API. All callbacks are defined by a string which Python will dynamically attempt to import. For example, `'robot_callbacks.move_distance'` would be translated to:
 ```python
-from supervisor_callbacks import move_distance
+from robot_callbacks import move_distance
 ```
 
-Callbacks at the API level (`callback_api`) are defined in [BenchBot API](https://github.com/roboticvisionorg/benchbot_api) & convert HTTP encoded data into easy-to-use Python data structures. Callbacks at the supervisor level (`callback_supervisor`) handle converting ROS data into HTTP encoded data, or vice versa, depending on the connection direction.
+Callbacks at the API level (`callback_api`) are defined in [BenchBot API](https://github.com/roboticvisionorg/benchbot_api) & convert HTTP encoded data into easy-to-use Python data structures. Callbacks at the robot level (`callback_robot`) are defined in [BenchBot Robot Controller](https://github.com/RoboticVisionOrg/benchbot_robot_controller), and handle converting ROS data into HTTP encoded data, or vice versa, depending on the connection direction.
 
 ### Defining task configurations
 
@@ -106,7 +113,5 @@ The supervisor includes a RESTful API for all interaction with a user-facing API
 | `/config/`    | <pre>{<br> ...<br> 'param_name': param_value,<br> ...<br>}</pre> | Dictionary containing containing parameter values for all of supervisor configuration settings. Keys correspond to parameter name, & values to parameter value. |
 | `/config/<config>` | `config_value` | Directly retrieve the value of a supervisor configuration parameter with name `'config'`. Returns `param_value` of `'config'`. |
 | `/connections/<connection>` | `dict` | Returns the response of the connection (e.g. an `image_rgb` connection would return the image) as a `dict`. Format & style of the `dict` is defined by the methods described above in "Defining environment, robot, & task configurations". |
-| `/simulator/` | <pre>Hello, I am the BenchBot simulator</pre> | Arbitrary response confirming a simulator manager is available. |
-| `/simulator/<command>` | `dict` | Passes the command `command` down to a running simulator manager. See [BenchBot Simulator](https://github.com/roboticvisionorg/benchbot_simulator) for documentation of supported commands & expected responses. |
-| `/status/is_finished` | <pre>{'is_finished': True\|False}</pre> | Returns whether the simulator has finished stepping through the current scene (i.e. does not have a next pose to traverse towards). |
-| `/status/environment_name` | <pre>{'environment_name': string}</pre> | Returns the name of the current environment in the format `'name_number'` (e.g. `'miniroom_1'`).
+| `/robot/` | <pre>Hello, I am the BenchBot robot controller</pre> | Arbitrary response confirming a robot controller is available. |
+| `/robot/<command>` | `dict` | Passes the command `command` down to a running robot controller manager. See [BenchBot Robot Controller](https://github.com/roboticvisionorg/benchbot_robot_controller) for documentation of supported commands & expected responses. |

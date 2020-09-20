@@ -1,0 +1,63 @@
+address: benchbot_robot:10000
+global_frame: map
+poses:
+  - odom
+  - robot
+  - left_camera
+  - lidar
+robot_frame: robot
+start_cmds:
+  - >
+    sed -i "0,/\"pose\":/{s/\(\"pose\": \)\(.*\)/\1$START_POSE/}"
+    $ISAAC_PATH/apps/carter/carter_sim/bridge_config/carter_full_config.json &&
+    cd "$ENVS_PATH" &&
+    ../IsaacSimProject.sh "$MAP_PATH" -isaac_sim_config_json=
+    "$ISAAC_PATH/apps/carter/carter_sim/bridge_config/carter_full.json"
+    -windowed -ResX=960 -ResY=540 -vulkan -game
+  - >
+    cd "$SIM_PATH" && ./bazelros run //apps/benchbot_simulator
+connections:
+  image_depth:
+    connection: "ros_to_api"
+    ros_topic: "/camera/depth/image_raw"
+    ros_type: "sensor_msgs/Image"
+    callback_robot: "robot_callbacks.encode_depth_image"
+  image_depth_info:
+    connection: "ros_to_api"
+    ros_topic: "/camera/depth/camera_info"
+    ros_type: "sensor_msgs/CameraInfo"
+    callback_robot: "robot_callbacks.encode_camera_info"
+  image_rgb:
+    connection: "ros_to_api"
+    ros_topic: "/camera/color/image_raw"
+    ros_type: "sensor_msgs/Image"
+    callback_api: "api_callbacks.convert_to_rgb"
+    callback_robot: "robot_callbacks.encode_color_image"
+  image_rgb_info:
+    connection: "ros_to_api"
+    ros_topic: "/camera/color/camera_info"
+    ros_type: "sensor_msgs/CameraInfo"
+    callback_robot: "robot_callbacks.encode_camera_info"
+  laser:
+    connection: "ros_to_api"
+    ros_topic: "/scan_laser"
+    ros_type: "sensor_msgs/LaserScan"
+    callback_robot: "robot_callbacks.encode_laserscan"
+  move_angle:
+    connection: "api_to_ros"
+    ros_topic: "/cmd_vel"
+    ros_type: "geometry_msgs/Twist"
+    callback_robot: "robot_callbacks.move_angle"
+  move_distance:
+    connection: "api_to_ros"
+    ros_topic: "/cmd_vel"
+    ros_type: "geometry_msgs/Twist"
+    callback_robot: "robot_callbacks.move_distance"
+  move_next:
+    connection: "api_to_ros"
+    ros_topic: "/cmd_vel"
+    ros_type: "geometry_msgs/Twist"
+    callback_robot: "robot_callbacks.move_next"
+  poses:
+    connection: "ros_to_api"
+    callback_robot: "robot_callbacks.create_pose_list"
