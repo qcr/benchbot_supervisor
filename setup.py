@@ -14,7 +14,6 @@ setup(
     packages=find_packages('src'),
     package_dir={'': 'src'},
     package_data={'benchbot_supervisor': ['*/*.yaml']},
-    scripts=['scripts/supervisor'],
     install_requires=['flask', 'gevent', 'pyyaml', 'requests'],
     classifiers=(
         "Programming Language :: Python :: 2",
