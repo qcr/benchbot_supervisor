@@ -8,7 +8,7 @@ The BenchBot Supervisor is a HTTP server facilitating communication between user
 
 ## Installing & running the BenchBot Supervisor
 
-BenchBot Supervisor is a Python package consisting of a class wrapping a HTTP server for both upstream and downstream communication. The package is installed like any other Python package:
+BenchBot Supervisor is a Python package containing a `Supervisor` class that wraps a HTTP server for both upstream and downstream communication. The package is installed like any other Python package:
 
 ```
 u@pc:~$ git clone https://github.com/roboticvisionorg/benchbot_supervisor
@@ -24,13 +24,6 @@ s = Supervisor(...args...)
 s.run()
 ```
 
-A run script is also provided in the package to facilitate easy passing of arguments from the command line:
-
-```
-u@pc:~$ python -m benchbot_supervisor supervisor ...args...
-```
-
-
 The following parameters are typically required for a useful instantiation of the supervisor:
 
 - **task_name**: string describing the requested task (format is `'type:control_mode:localisation_mode'`)
@@ -40,16 +33,21 @@ The following parameters are typically required for a useful instantiation of th
 - **environment_files**: colon separated list of filenames pointing to the environment metadata file of each environment intended to be run
 - **simulator_address**: address of a running simulator controller (e.g. `'benchbot_simulator:10000'`)
 
-As an example, the below command runs the supervisor for a scene change detection task, where active control is employed with ground truth localisation on a Carter robot, & environment miniroom:1:5 is used (a simulator is also available at address `'benchbot_simulator:10000'`):
+The module can also be directly executed, making passing of arguments from the command line simple (see `python -m benchbot_supervisor --help` for argument details):
 
 ```
-u@pc:~$ rosrun benchbot_supervisor benchbot_supervisor \
-    _task_name:='scd:active:ground_truth' \
-    _robot_file:='carter.yaml' \
-    _observations_file:='ground_truth.yaml' \
-    _actions_file:='active.yaml' \
-    _environment_files:='<envs_dir>/miniroom_1.yaml:<envs_dir>/miniroom_5.yaml' \
-    _simulator_address:='benchbot_simulator:10000'
+u@pc:~$ python -m benchbot_supervisor supervisor ...args...
+```
+
+As an example, the below command runs the supervisor for a scene change detection task, where active control is employed with ground truth localisation on a simulated Carter robot, & environment miniroom:1:5 is used:
+
+```
+u@pc:~$ python -m benchbot_supervisor \
+    --task-name 'scd:active:ground_truth' \
+    --robot-file 'carter_sim.yaml' \
+    --observations-file 'ground_truth.yaml' \
+    --actions-file 'active.yaml' \
+    --environment-files '<envs_dir>/miniroom_1.yaml:<envs_dir>/miniroom_5.yaml' \
 ```
 
 ## Employing environment, robot, & task configurations
@@ -62,31 +60,31 @@ Environment configurations are created upon the creation of each environment, & 
 
 ### Defining robot configurations
 
-The BenchBot Supervisor defines a robot as a series of directional "connections" either passing data from the robot up through the supervisor, or down through the supervisor to the robot. The snippet below for the Carter robot shows an example of both types of connection:
+The BenchBot Supervisor defines a robot primarily as a series of directional "connections" either passing data from the robot up through the supervisor, or down through the supervisor to the robot. The snippet below for the Carter robot shows an example of both types of connection:
 ```yaml
 # ./robots/carter.yaml
 
 ...
-image_rgb:
-  connection: "ros_to_api"
-  ros_topic: "/camera/color/image_raw"
-  ros_type: "sensor_msgs/Image"
-  callback_supervisor: "supervisor_callbacks.encode_color_image"
-  callback_api: "api_callbacks.decode_color_image"
-...
-move_distance:
-  connection: "api_to_ros"
-  ros_topic: "/cmd_vel"
-  ros_type: "geometry_msgs/Twist"
-  callback_supervisor: "supervisor_callbacks.move_distance"
+connections:
+  image_rgb:
+    connection: "ros_to_api"
+    ros_topic: "/camera/color/image_raw"
+    ros_type: "sensor_msgs/Image"
+    callback_robot: "robot_callbacks.encode_color_image"
+    callback_api: "api_callbacks.decode_color_image"
+  move_distance:
+    connection: "api_to_ros"
+    ros_topic: "/cmd_vel"
+    ros_type: "geometry_msgs/Twist"
+    callback_robot: "robot_callbacks.move_distance"
 ...
 ```
-The connection `image_rgb` passes an image from the robot up towards the BenchBot API, whereas the `move_distance` connection passes a movement command  from the API down to the robot. Callback definitions are used to handle the conversion process between ROS data, HTTP data, & the simple data required in the API. All callbacks are defined by a string which Python will dynamically attempt to import. For example, `'supervisor_callbacks.move_distance'` would be translated to:
+The connection `image_rgb` passes an image from the robot up towards the BenchBot API, whereas the `move_distance` connection passes a movement command  from the API down to the robot. Callback definitions are used to handle the conversion process between ROS data, HTTP data, & the simple data required in the API. All callbacks are defined by a string which Python will dynamically attempt to import. For example, `'robot_callbacks.move_distance'` would be translated to:
 ```python
-from supervisor_callbacks import move_distance
+from robot_callbacks import move_distance
 ```
 
-Callbacks at the API level (`callback_api`) are defined in [BenchBot API](https://github.com/roboticvisionorg/benchbot_api) & convert HTTP encoded data into easy-to-use Python data structures. Callbacks at the supervisor level (`callback_supervisor`) handle converting ROS data into HTTP encoded data, or vice versa, depending on the connection direction.
+Callbacks at the API level (`callback_api`) are defined in [BenchBot API](https://github.com/roboticvisionorg/benchbot_api) & convert HTTP encoded data into easy-to-use Python data structures. Callbacks at the robot level (`callback_robot`) are defined in [BenchBot Robot Controller](https://github.com/RoboticVisionOrg/benchbot_robot_controller), and handle converting ROS data into HTTP encoded data, or vice versa, depending on the connection direction.
 
 ### Defining task configurations
 
