@@ -6,14 +6,11 @@ import os
 import pprint
 import re
 import requests
-import rospkg
 import rospy
 import sys
 import time
 import traceback
 import yaml
-
-_PACKAGE_NAME = "benchbot_supervisor"
 
 _SUPERVISOR_PORT = 10000
 
@@ -31,11 +28,10 @@ def _open_yaml_file(filename, key=None):
     if filename.startswith("/"):
         abs_file_path = filename
     elif filename.startswith("./"):
-        abs_file_path = os.path.join(rospkg.RosPack().get_path(_PACKAGE_NAME),
-                                     filename[2:])
+        abs_file_path = os.path.join(os.path.dirname(__file__), filename[2:])
     elif key is not None and key.endswith('_file'):
         abs_file_path = os.path.join(
-            rospkg.RosPack().get_path(_PACKAGE_NAME),
+            os.path.dirname(__file__),
             re.match('^(.*?)s*_file', key).groups()[0] + 's', filename)
     else:
         return None
