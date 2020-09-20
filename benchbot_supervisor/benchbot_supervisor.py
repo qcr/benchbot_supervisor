@@ -227,9 +227,7 @@ class Supervisor(object):
               self.supervisor_address)
 
         print("\nWaiting until a robot controller is found @ '%s' ... " %
-              self.config['robot']['address'],
-              end='')
-        sys.stdout.flush()
+              self.config['robot']['address'])
         connected = False
         while not connected:
             try:
@@ -238,17 +236,15 @@ class Supervisor(object):
             except Exception as e:
                 pass
             time.sleep(1)
-        print("Found")
+        print("\tFound")
 
         # TODO we need to ensure map file is loaded if sending to a remote!
-        print("\nSending environment data & robot config to controller ... ",
-              end='')
-        sys.stdout.flush()
+        print("Sending environment data & robot config to controller ... ")
         self._robot('/configure', {
             'environments': self.environment_data,
             'robot': self.config['robot']
         })
-        print("Ready\n")
+        print("\tReady\n")
 
         # Run the server in a blocking manner until the Supervisor is closed
         evt.wait()
