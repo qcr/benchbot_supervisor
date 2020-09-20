@@ -6,7 +6,6 @@ import os
 import pprint
 import re
 import requests
-import rospy
 import sys
 import time
 import traceback
@@ -50,17 +49,24 @@ class Supervisor(object):
         'task_name': ''
     }
 
-    def __init__(self, port=_SUPERVISOR_PORT):
+    def __init__(self,
+                 port=_SUPERVISOR_PORT,
+                 task_file=None,
+                 task_name=None,
+                 robot_file=None,
+                 actions_file=None,
+                 observations_file=None,
+                 environment_files=None):
         print("Initialising supervisor...")
 
         # Configuration parameters
         self.supervisor_address = 'http://0.0.0.0:' + str(port)
-        self.task_file = None
-        self.task_name = None
-        self.robot_file = None
-        self.actions_file = None
-        self.observations_file = None
-        self.environment_files = None
+        self.task_file = task_file
+        self.task_name = task_name
+        self.robot_file = robot_file
+        self.actions_file = actions_file
+        self.observations_file = observations_file
+        self.environment_files = environment_files
         self.environment_data = None
         self.config = None
 
@@ -69,13 +75,9 @@ class Supervisor(object):
 
         # Configure the Supervisor with provided arguments
         print("Configuring the supervisor...")
-        self.configure(
-            task_file=rospy.get_param("~task_file", None),
-            task_name=rospy.get_param("~task_name", None),
-            robot_file=rospy.get_param("~robot_file", None),
-            actions_file=rospy.get_param("~actions_file", None),
-            observations_file=rospy.get_param("~observations_file", None),
-            environment_files=rospy.get_param("~environment_files", None))
+        self.configure(self.task_file, self.task_name, self.robot_file,
+                       self.actions_file, self.observations_file,
+                       self.environment_files)
 
     def _load_config_from_file(self, key):
         # Bit rough... but eh... that's why its hidden
@@ -172,7 +174,7 @@ class Supervisor(object):
             if config in self.config:
                 return flask.jsonify(self.config[config])
             else:
-                rospy.logerr("Requested non-existent config: %s" % config)
+                print("ERROR: Requested non-existent config: %s" % config)
                 flask.abort(404)
 
         @supervisor_flask.route('/connections/<connection>',
@@ -182,7 +184,7 @@ class Supervisor(object):
             # has been received on a ROS topic!!! (at the moment all we get is
             # an unhelpful null & success...)
             if connection not in self.config['robot']['connections']:
-                rospy.logerr("Requested undefined connection: %s" % connection)
+                print("ERROR: Requested undefined connection: %s" % connection)
                 flask.abort(404)
             try:
                 return self._robot(
@@ -190,8 +192,8 @@ class Supervisor(object):
                     data=(flask.request.get_json()
                           if flask.request.method == 'POST' else None))
             except Exception as e:
-                rospy.logerr("Supervisor failed on processing connection "
-                             "'%s' with error:\n%s" % (connection, repr(e)))
+                print("ERROR: Supervisor failed on processing connection "
+                      "'%s' with error:\n%s" % (connection, repr(e)))
                 flask.abort(500)
 
         @supervisor_flask.route('/robot/', methods=['GET'])
@@ -199,7 +201,7 @@ class Supervisor(object):
             try:
                 return flask.jsonify(self._robot('/'))
             except Exception as e:
-                rospy.logerr("Supervisor failed to contact the robot: %s" % e)
+                print("ERROR: Supervisor failed to contact the robot: %s" % e)
                 flask.abort(500)
 
         @supervisor_flask.route('/robot/<command>', methods=['GET'])
@@ -207,9 +209,8 @@ class Supervisor(object):
             try:
                 return self._robot(command)
             except Exception as e:
-                rospy.logerr("Supervisor received the following error when "
-                             "issuing command '%s' to the robot: %s" %
-                             (command, e))
+                print("ERROR: Supervisor received the following error when "
+                      "issuing command '%s' to the robot: %s" % (command, e))
                 flask.abort(500)
 
         # Configure our server
