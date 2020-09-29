@@ -105,7 +105,7 @@ and the below file lists what observation sources should be available in ground 
 
 ## Interacting with the BenchBot Supervisor
 
-The supervisor includes a RESTful API for all interaction with a user-facing API. The RESTful API includes the following commands:
+The supervisor includes a RESTful HTTP API for all interaction with a user-facing API. The RESTful API includes the following commands:
 
 | Request Route | Response Format | Description |
 | --------------|---------------|-------------|

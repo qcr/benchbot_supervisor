@@ -53,4 +53,4 @@ connections:
     callback_robot: "robot_callbacks.move_next"
   poses:
     connection: "ros_to_api"
-    callback_robot: "supervisor_callbacks.create_pose_list"
+    callback_robot: "robot_callbacks.create_pose_list"
