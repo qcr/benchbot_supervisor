@@ -33,6 +33,7 @@ def _open_yaml_file(filename, key=None):
             re.match('^(.*?)s*_file', key).groups()[0] + 's', filename)
     else:
         return None
+    print("OPENING YAML FILE: %s" % abs_file_path)
     with open(abs_file_path, 'r') as f:
         return yaml.safe_load(f)
 
