@@ -8,6 +8,7 @@ poses:
 robot_frame: base_link
 start_cmds:
   - >
+    export ROS_MASTER_URI=http://submissions:11311 &&
     roslaunch guiabot_launch full_wayfinding.launch
 connections:
   image_depth:
