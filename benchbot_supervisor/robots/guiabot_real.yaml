@@ -9,7 +9,7 @@ robot_frame: base_link
 start_cmds:
   - >
     export ROS_MASTER_URI=http://submissions:11311 &&
-    roslaunch guiabot_launch full_wayfinding.launch
+    roslaunch guiabot_launch full_waypoint_driving.launch
 connections:
   image_depth:
     connection: "ros_to_api"
