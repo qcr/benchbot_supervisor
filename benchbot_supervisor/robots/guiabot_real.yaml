@@ -6,7 +6,7 @@ poses:
   - camera_front
   - laser
 robot_frame: base_link
-speed_factor: 0.2
+speed_factor: 0.4
 start_cmds:
   - >
     export ROS_MASTER_URI=http://benchbot_ros:11311 &&
