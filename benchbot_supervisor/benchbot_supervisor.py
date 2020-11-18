@@ -33,7 +33,6 @@ def _open_yaml_file(filename, key=None):
             re.match('^(.*?)s*_file', key).groups()[0] + 's', filename)
     else:
         return None
-    print("OPENING YAML FILE: %s" % abs_file_path)
     with open(abs_file_path, 'r') as f:
         return yaml.safe_load(f)
 
@@ -150,8 +149,8 @@ class Supervisor(object):
 
         # Validate that we can satisfy all action & observation requests
         for x in self.config['actions'] + self.config['observations']:
-            if (self.config['robot']['connections'] is None or
-                    x not in self.config['robot']['connections']):
+            if (self.config['robot']['connections'] is None
+                    or x not in self.config['robot']['connections']):
                 raise ValueError(
                     "An action / observation was defined using the connection '%s',"
                     " which was not declared for the robot in file '%s'" %
