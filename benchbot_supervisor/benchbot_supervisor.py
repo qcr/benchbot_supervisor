@@ -242,7 +242,8 @@ class Supervisor(object):
         print("Sending environment data & robot config to controller ... ")
         self._robot('/configure', {
             'environments': self.environment_data,
-            'robot': self.config['robot']
+            'robot': self.config['robot'],
+            'task': {'name': self.config['task_name']}
         })
         print("\tReady\n")
 

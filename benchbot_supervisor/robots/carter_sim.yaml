@@ -1,8 +1,8 @@
 address: benchbot_robot:10000
 global_frame: map
 poses:
-  - odom
   - robot
+  - initial_pose
   - left_camera
   - lidar
 robot_frame: robot
