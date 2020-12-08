@@ -1,0 +1,58 @@
+address: guiabot:10000
+global_frame: map
+poses:
+  - odom
+  - base_link
+  - camera_front
+  - laser
+robot_frame: base_link
+speed_factor: 0.4
+start_cmds:
+  - >
+    export ROS_MASTER_URI=http://benchbot_ros:11311 &&
+    roslaunch guiabot_launch full_benchbot.launch
+connections:
+  image_depth:
+    connection: "ros_to_api"
+    ros_topic: "/camera_front/aligned_depth_to_color/image_raw"
+    ros_type: "sensor_msgs/Image"
+    callback_robot: "robot_callbacks.encode_depth_image"
+  image_depth_info:
+    connection: "ros_to_api"
+    ros_topic: "/camera_front/aligned_depth_to_color/camera_info"
+    ros_type: "sensor_msgs/CameraInfo"
+    callback_robot: "robot_callbacks.encode_camera_info"
+  image_rgb:
+    connection: "ros_to_api"
+    ros_topic: "/camera_front/color/image_rect_color"
+    ros_type: "sensor_msgs/Image"
+    callback_api: "api_callbacks.convert_to_rgb"
+    callback_robot: "robot_callbacks.encode_color_image"
+  image_rgb_info:
+    connection: "ros_to_api"
+    ros_topic: "/camera_front/color/camera_info"
+    ros_type: "sensor_msgs/CameraInfo"
+    callback_robot: "robot_callbacks.encode_camera_info"
+  laser:
+    connection: "ros_to_api"
+    ros_topic: "/scan_laser_fixed"
+    ros_type: "sensor_msgs/LaserScan"
+    callback_robot: "robot_callbacks.encode_laserscan"
+  move_angle:
+    connection: "api_to_ros"
+    ros_topic: "/cmd_vel"
+    ros_type: "geometry_msgs/Twist"
+    callback_robot: "robot_callbacks.move_angle"
+  move_distance:
+    connection: "api_to_ros"
+    ros_topic: "/cmd_vel"
+    ros_type: "geometry_msgs/Twist"
+    callback_robot: "robot_callbacks.move_distance"
+  move_next:
+    connection: "api_to_ros"
+    ros_topic: "/cmd_vel"
+    ros_type: "geometry_msgs/Twist"
+    callback_robot: "robot_callbacks.move_next"
+  poses:
+    connection: "ros_to_api"
+    callback_robot: "robot_callbacks.create_pose_list"
