@@ -6,9 +6,12 @@ poses:
   - left_camera
   - lidar
 robot_frame: robot
+# perl -0777 -i -pe 's/\"static_mesh\".*?\]/\"static_mesh\":$OBJECT_LABELS/s'
 start_cmds:
   - >
     sed -i "0,/\"pose\":/{s/\(\"pose\": \)\(.*\)/\1$START_POSE/}"
+    $ISAAC_PATH/apps/carter/carter_sim/bridge_config/carter_full_config.json &&
+    perl -0777 -i -pe 's/\"static_mesh\".*?\]/\"static_mesh\":$OBJECT_LABELS/s'
     $ISAAC_PATH/apps/carter/carter_sim/bridge_config/carter_full_config.json &&
     cd "$ENVS_PATH" &&
     ../IsaacSimProject.sh "$MAP_PATH" -isaac_sim_config_json=
@@ -36,6 +39,16 @@ connections:
   image_rgb_info:
     connection: "ros_to_api"
     ros_topic: "/camera/color/camera_info"
+    ros_type: "sensor_msgs/CameraInfo"
+    callback_robot: "robot_callbacks.encode_camera_info"
+  image_segment:
+    connection: "ros_to_api"
+    ros_topic: "/camera/segment/segment_msg"
+    ros_type: "benchbot_msgs/isaac_segment_img"
+    callback_robot: "robot_callbacks.encode_segment_image"
+  image_segment_info:
+    connection: "ros_to_api"
+    ros_topic: "/camera/segment/camera_info"
     ros_type: "sensor_msgs/CameraInfo"
     callback_robot: "robot_callbacks.encode_camera_info"
   laser:
