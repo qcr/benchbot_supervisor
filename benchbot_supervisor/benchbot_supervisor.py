@@ -12,29 +12,14 @@ import yaml
 
 DEFAULT_PORT = 10000
 
+FILE_PATH_KEY = '_file_path'
+
 
 def _merge_dicts(dict_1, dict_2):
     # Note: duplicate keys in dict_2 will overwrite dict_1
     out = dict_1.copy()
     out.update(dict_2)
     return out
-
-
-def _open_yaml_file(filename, key=None):
-    # Accepts default folder, relative to root of this package, or absolute
-    # path
-    if filename.startswith("/"):
-        abs_file_path = filename
-    elif filename.startswith("./"):
-        abs_file_path = os.path.join(os.path.dirname(__file__), filename[2:])
-    elif key is not None and key.endswith('_file'):
-        abs_file_path = os.path.join(
-            os.path.dirname(__file__),
-            re.match('^(.*?)s*_file', key).groups()[0] + 's', filename)
-    else:
-        return None
-    with open(abs_file_path, 'r') as f:
-        return yaml.safe_load(f)
 
 
 # TODO: this does not clean up ROS publishers / subscribers properly. Will need
@@ -76,13 +61,20 @@ class Supervisor(object):
         print("Configuring the supervisor...")
         self.configure(task_file, robot_file, environment_files)
 
-    def _load_config_from_file(self, key):
-        # Bit rough... but eh... that's why its hidden
+    def _load_config_from_file(self, key, files, force_list=False):
+        if not isinstance(files, list):
+            files = [files]
+        use_list = force_list or len(files) > 1
+
+        data = []
+        for f in files:
+            with open(f, 'r') as fp:
+                data.append(yaml.safe_load(fp))
+            data[-1][FILE_PATH_KEY] = f
+
         if self.config is None:
             self.config = self._BLANK_CONFIG.copy()
-        if getattr(self, key) is not None:
-            self.config[(key[:-5] if key.endswith('_file') else
-                         key)] = _open_yaml_file(getattr(self, key), key)
+        self.config[key] = data if use_list else data[0]
 
     def _robot(self, command, data=None):
         return (requests.get if data is None else requests.post)(
@@ -91,18 +83,9 @@ class Supervisor(object):
                 'json': data
             })).json()
 
-    def configure(self,
-                  task_file=None,
-                  task_name=None,
-                  robot_file=None,
-                  actions_file=None,
-                  observations_file=None,
-                  environment_files=None):
+    def configure(self, task_file, robot_file, environment_files):
         self.task_file = task_file
-        self.task_name = task_name
         self.robot_file = robot_file
-        self.actions_file = actions_file
-        self.observations_file = observations_file
         self.environment_files = (None if environment_files is None else
                                   environment_files.split(':'))
 
@@ -112,47 +95,34 @@ class Supervisor(object):
         pprint.pprint(self.config)
 
     def load(self):
-        # Process all of the configuration parameters
-        # Note: task file is loaded first, then anything specified explicitly
-        # (i.e. every other parameter) is loaded overwriting values from the
-        # task_file
-        self.config = self._BLANK_CONFIG.copy()
-        for k in [
-                'task_file', 'robot_file', 'actions_file', 'observations_file'
-        ]:
-            self._load_config_from_file(k)
-        if self.task_name is not None:
-            self.config['task_name'] = self.task_name
-        if self.environment_files is not None:
-            self.environment_data = {}
-            self.config['environment_names'] = []
-            for i, f in enumerate(self.environment_files):
-                with open(f, 'r') as fd:
-                    d = yaml.safe_load(fd)
-                d['order'] = i
-                d['path'] = f
-                self.environment_data[d['environment_name']] = d
-                self.config['environment_names'].append(d['environment_name'])
+        # Load all of the configuration data provided in the selected YAML files
+        self._load_config_from_file('task', self.task_file)
+        self._load_config_from_file('robot', self.robot_file)
+        self._load_config_from_file('environments',
+                                    self.environment_files,
+                                    force_list=True)
+
+        # Perform any required manual cleaning / sanitising of data
         if 'start_cmds' in self.config['robot']:
             self.config['robot']['start_cmds'] = [
                 c.strip() for c in self.config['robot']['start_cmds']
             ]
-
-        # Ensure we have a usable robot address
         if 'address' not in self.config['robot']:
             raise ValueError("ERROR: No address was received for the robot!")
         elif not self.config['robot']['address'].startswith("http://"):
             self.config['robot']['address'] = ('http://' +
                                                self.config['robot']['address'])
 
-        # Validate that we can satisfy all action & observation requests
-        for x in self.config['actions'] + self.config['observations']:
+        # Confirm the requested robot can satisfy all actions & observations
+        # requested by the task
+        for x in (self.config['task']['actions'] +
+                  self.config['task']['observations']):
             if (self.config['robot']['connections'] is None
                     or x not in self.config['robot']['connections']):
                 raise ValueError(
-                    "An action / observation was defined using the connection '%s',"
-                    " which was not declared for the robot in file '%s'" %
-                    (x, self.robot_file))
+                    "The task '%s' requires an action / observation called '%s',"
+                    " which isn't declared for the robot in file '%s'" %
+                    (self.config['task']['name'], x, self.robot_file))
 
     def run(self):
         # Setup all of the supervisor managament functions
