@@ -58,25 +58,23 @@ class Supervisor(object):
                  environment_files=None):
         print("Initialising supervisor...")
 
-        # Configuration parameters
+        # Configuration parameters (these are mostly set by the 'configure()'
+        # function, but we need to declare them as class members here)
         self.supervisor_address = 'http://0.0.0.0:' + str(port)
-        self.task_file = task_file
-        self.task_name = task_name
-        self.robot_file = robot_file
-        self.actions_file = actions_file
-        self.observations_file = observations_file
-        self.environment_files = environment_files
-        self.environment_data = None
+        self.task_file = None
+        self.robot_file = None
+        self.environment_files = None
+
+        # Derived configuration variables
         self.config = None
+        self.environment_data = None
 
         # Current state
         self.state = {}
 
         # Configure the Supervisor with provided arguments
         print("Configuring the supervisor...")
-        self.configure(self.task_file, self.task_name, self.robot_file,
-                       self.actions_file, self.observations_file,
-                       self.environment_files)
+        self.configure(task_file, robot_file, environment_files)
 
     def _load_config_from_file(self, key):
         # Bit rough... but eh... that's why its hidden
@@ -240,11 +238,14 @@ class Supervisor(object):
 
         # TODO we need to ensure map file is loaded if sending to a remote!
         print("Sending environment data & robot config to controller ... ")
-        self._robot('/configure', {
-            'environments': self.environment_data,
-            'robot': self.config['robot'],
-            'task': {'name': self.config['task_name']}
-        })
+        self._robot(
+            '/configure', {
+                'environments': self.environment_data,
+                'robot': self.config['robot'],
+                'task': {
+                    'name': self.config['task_name']
+                }
+            })
         print("\tReady\n")
 
         # Run the server in a blocking manner until the Supervisor is closed
