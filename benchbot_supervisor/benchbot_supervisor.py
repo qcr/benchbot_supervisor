@@ -25,13 +25,7 @@ def _merge_dicts(dict_1, dict_2):
 # TODO: this does not clean up ROS publishers / subscribers properly. Will need
 # to do this if configurations plan to be changed dynamically
 class Supervisor(object):
-    _BLANK_CONFIG = {
-        'actions': [],
-        'environment_names': [],
-        'observations': [],
-        'robot': {},
-        'task_name': ''
-    }
+    _BLANK_CONFIG = {'environments': [], 'robot': {}, 'task': {}}
 
     def __init__(self,
                  port=DEFAULT_PORT,
@@ -208,14 +202,7 @@ class Supervisor(object):
 
         # TODO we need to ensure map file is loaded if sending to a remote!
         print("Sending environment data & robot config to controller ... ")
-        self._robot(
-            '/configure', {
-                'environments': self.environment_data,
-                'robot': self.config['robot'],
-                'task': {
-                    'name': self.config['task_name']
-                }
-            })
+        self._robot('/configure', self.config)
         print("\tReady\n")
 
         # Run the server in a blocking manner until the Supervisor is closed
