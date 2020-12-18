@@ -130,13 +130,16 @@ class Supervisor(object):
         def __config_full():
             return flask.jsonify(self.config)
 
-        @supervisor_flask.route('/config/<config>', methods=['GET'])
+        @supervisor_flask.route('/config/<path:config>', methods=['GET'])
         def __config(config):
-            if config in self.config:
-                return flask.jsonify(self.config[config])
-            else:
-                print("ERROR: Requested non-existent config: %s" % config)
-                flask.abort(404)
+            c = self.config
+            for k in config.split('/'):
+                if k in c:
+                    c = c[k]
+                else:
+                    print("ERROR: Requested non-existent config: %s" % config)
+                    flask.abort(404)
+            return flask.jsonify(c)
 
         @supervisor_flask.route('/connections/<connection>',
                                 methods=['GET', 'POST'])
