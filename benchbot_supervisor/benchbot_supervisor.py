@@ -86,7 +86,7 @@ class Supervisor(object):
         self.load()
 
         print("Starting a supervisor with the following configuration:\n")
-        pprint.pprint(self.config)
+        pprint.pprint(self.config, depth=3)
 
     def load(self):
         # Load all of the configuration data provided in the selected YAML files
