@@ -96,12 +96,11 @@ class Supervisor(object):
     def load(self):
         # Load all of the configuration data provided in the selected YAML files
         self._load_config_from_file('task', self.task_file)
+        self._load_config_from_file('results', self.result_format_file)
         self._load_config_from_file('robot', self.robot_file)
         self._load_config_from_file('environments',
                                     self.environment_files,
                                     force_list=True)
-        with open(self.result_format_file, 'r') as f:
-            self.config['task']['result_format'] = yaml.safe_load(f)
 
         # Perform any required manual cleaning / sanitising of data
         if 'start_cmds' in self.config['robot']:
