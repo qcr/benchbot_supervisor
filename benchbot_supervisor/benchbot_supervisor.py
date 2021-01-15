@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import flask
 from gevent import event, pywsgi, signal
+import importlib
 import os
 import pprint
 import re
@@ -52,6 +53,7 @@ class Supervisor(object):
 
         # Current state
         self.state = {}
+        self.results_functions = {}
 
         # Configure the Supervisor with provided arguments
         print("Configuring the supervisor...")
@@ -101,6 +103,17 @@ class Supervisor(object):
         self._load_config_from_file('environments',
                                     self.environment_files,
                                     force_list=True)
+
+        # Load the helper functions for results creation
+        if 'functions' in self.config['results']:
+            sys.path.insert(
+                0, os.path.dirname(self.config['results']['_file_path']))
+            self.results_functions = {
+                k: getattr(importlib.import_module(re.sub('\.[^\.]*$', "", v)),
+                           re.sub('^.*\.', "", v))
+                for k, v in self.config['results']['functions'].items()
+            }
+            del sys.path[0]
 
         # Perform any required manual cleaning / sanitising of data
         if 'start_cmds' in self.config['robot']:
@@ -165,6 +178,23 @@ class Supervisor(object):
                 print("ERROR: Supervisor failed on processing connection "
                       "'%s' with error:\n%s" % (connection, repr(e)))
                 flask.abort(500)
+
+        @supervisor_flask.route('/results_functions/', methods=['GET'])
+        def __results_functions_list():
+            try:
+                return flask.jsonify(list(self.results_functions.keys()))
+            except Exception as e:
+                print("ERROR: Supervisor failed to list available results "
+                      "functions with error:\n%s" % repr(e))
+
+        @supervisor_flask.route('/results_functions/<function>',
+                                methods=['GET'])
+        def __results_function(function):
+            try:
+                return flask.jsonify(self.results_functions[function]())
+            except Exception as e:
+                print("ERROR: Supervisor failed to call results function "
+                      "'%s' with error:\n%s" % (function, repr(e)))
 
         @supervisor_flask.route('/robot/', methods=['GET'])
         def __robot_check():
