@@ -191,7 +191,14 @@ class Supervisor(object):
                                 methods=['GET'])
         def __results_function(function):
             try:
-                return flask.jsonify(self.results_functions[function]())
+                data = flask.request.get_json()
+                data = {} if data is None else data
+                if 'args' not in data:
+                    data['args'] = []
+                if 'kwargs' not in data:
+                    data['kwargs'] = {}
+                return flask.jsonify(self.results_functions[function](
+                    *data['args'], **data['kwargs']))
             except Exception as e:
                 print("ERROR: Supervisor failed to call results function "
                       "'%s' with error:\n%s" % (function, repr(e)))
