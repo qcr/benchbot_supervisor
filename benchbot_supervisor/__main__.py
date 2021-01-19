@@ -10,7 +10,7 @@ if __name__ == '__main__':
                    default=DEFAULT_PORT)
     p.add_argument('--task-file', help="File containing a task specification")
     p.add_argument(
-        '--result-format-file',
+        '--results-format-file',
         help="File containing specification for the task's results format")
     p.add_argument('--robot-file', help="File containing a robot definition")
     p.add_argument(
@@ -23,7 +23,7 @@ if __name__ == '__main__':
     # Start the supervisor
     s = Supervisor(port=args.port,
                    task_file=args.task_file,
-                   result_format_file=args.result_format_file,
+                   results_format_file=args.results_format_file,
                    robot_file=args.robot_file,
                    environment_files=args.environment_files)
     s.run()

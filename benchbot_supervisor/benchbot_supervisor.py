@@ -32,7 +32,7 @@ class Supervisor(object):
                  port=DEFAULT_PORT,
                  task_file=None,
                  task_name=None,
-                 result_format_file=None,
+                 results_format_file=None,
                  robot_file=None,
                  actions_file=None,
                  observations_file=None,
@@ -43,7 +43,7 @@ class Supervisor(object):
         # function, but we need to declare them as class members here)
         self.supervisor_address = 'http://0.0.0.0:' + str(port)
         self.task_file = None
-        self.result_format_file = None
+        self.results_format_file = None
         self.robot_file = None
         self.environment_files = None
 
@@ -57,7 +57,7 @@ class Supervisor(object):
 
         # Configure the Supervisor with provided arguments
         print("Configuring the supervisor...")
-        self.configure(task_file, result_format_file, robot_file,
+        self.configure(task_file, results_format_file, robot_file,
                        environment_files)
 
     def _load_config_from_file(self, key, files, force_list=False):
@@ -82,10 +82,10 @@ class Supervisor(object):
                 'json': data
             })).json()
 
-    def configure(self, task_file, result_format_file, robot_file,
+    def configure(self, task_file, results_format_file, robot_file,
                   environment_files):
         self.task_file = task_file
-        self.result_format_file = result_format_file
+        self.results_format_file = results_format_file
         self.robot_file = robot_file
         self.environment_files = (None if environment_files is None else
                                   environment_files.split(':'))
@@ -98,7 +98,7 @@ class Supervisor(object):
     def load(self):
         # Load all of the configuration data provided in the selected YAML files
         self._load_config_from_file('task', self.task_file)
-        self._load_config_from_file('results', self.result_format_file)
+        self._load_config_from_file('results', self.results_format_file)
         self._load_config_from_file('robot', self.robot_file)
         self._load_config_from_file('environments',
                                     self.environment_files,
@@ -116,6 +116,8 @@ class Supervisor(object):
             del sys.path[0]
 
         # Perform any required manual cleaning / sanitising of data
+        if 'scene_count' not in self.config['task']:
+            self.config['task']['scene_count'] = 1
         if 'start_cmds' in self.config['robot']:
             self.config['robot']['start_cmds'] = [
                 c.strip() for c in self.config['robot']['start_cmds']
