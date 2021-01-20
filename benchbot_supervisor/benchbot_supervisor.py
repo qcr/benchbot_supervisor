@@ -107,7 +107,7 @@ class Supervisor(object):
         # Load the helper functions for results creation
         if 'functions' in self.config['results']:
             sys.path.insert(
-                0, os.path.dirname(self.config['results']['_file_path']))
+                0, os.path.dirname(self.config['results'][FILE_PATH_KEY]))
             self.results_functions = {
                 k: getattr(importlib.import_module(re.sub('\.[^\.]*$', "", v)),
                            re.sub('^.*\.', "", v))
