@@ -57,11 +57,9 @@ class Supervisor(object):
         sys.path.insert(0, addons_path)
         self.addons = importlib.import_module('benchbot_addons.manager')
         del sys.path[0]
-        print("LOADED MANAGER:")
-        print(self.addons)
 
         # Configure the Supervisor with provided arguments
-        print("Configuring the supervisor...")
+        print("\nConfiguring the supervisor...")
         self.load()
 
         # At this point we have a running supervisor ready for use
@@ -92,12 +90,22 @@ class Supervisor(object):
 
     def load(self):
         # Load all of the configuration data provided in the selected YAML files
-        self._load_config_from_file('task', self.task_file)
-        self._load_config_from_file('results', self.results_format_file)
-        self._load_config_from_file('robot', self.robot_file)
-        self._load_config_from_file('environments',
-                                    self.environment_files,
-                                    force_list=True)
+        if self.config is None:
+            self.config = self._BLANK_CONFIG.copy()
+        self.config['task'] = self.addons.get_match("tasks",
+                                                    [("name", self.task_name)],
+                                                    return_data=True)
+        self.config['results'] = self.addons.get_match(
+            "formats", [("name", self.results_format_name)], return_data=True)
+        self.config['robot'] = self.addons.get_match(
+            "robots", [("name", self.robot_name)], return_data=True)
+        self.config['environments'] = [
+            self.addons.get_match("environments",
+                                  [("name", self.addons.env_name(e)),
+                                   ("variant", self.addons.env_variant(e))],
+                                  return_data=True)
+            for e in self.environment_names
+        ]
 
         # Load the helper functions for results creation
         if 'functions' in self.config['results']:
