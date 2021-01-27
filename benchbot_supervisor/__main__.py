@@ -18,6 +18,9 @@ if __name__ == '__main__':
         help=
         "List files (colon separated), each file containing the definition for "
         "a selected environment")
+    p.add_argument(
+        '--addons-path',
+        help="Path where the benchbot_addons Python package can be found")
     args = p.parse_args()
 
     # Start the supervisor
@@ -25,5 +28,6 @@ if __name__ == '__main__':
                    task_file=args.task_file,
                    results_format_file=args.results_format_file,
                    robot_file=args.robot_file,
-                   environment_files=args.environment_files)
+                   environment_files=args.environment_files,
+                   addons_path=args.addons_path)
     s.run()

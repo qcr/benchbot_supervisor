@@ -36,7 +36,8 @@ class Supervisor(object):
                  robot_file=None,
                  actions_file=None,
                  observations_file=None,
-                 environment_files=None):
+                 environment_files=None,
+                 addons_path=None):
         print("Initialising supervisor...")
 
         # Configuration parameters (these are mostly set by the 'configure()'
@@ -46,6 +47,7 @@ class Supervisor(object):
         self.results_format_file = None
         self.robot_file = None
         self.environment_files = None
+        self.addons = None
 
         # Derived configuration variables
         self.config = None
@@ -58,7 +60,7 @@ class Supervisor(object):
         # Configure the Supervisor with provided arguments
         print("Configuring the supervisor...")
         self.configure(task_file, results_format_file, robot_file,
-                       environment_files)
+                       environment_files, addons_path)
 
     def _load_config_from_file(self, key, files, force_list=False):
         if not isinstance(files, list):
@@ -83,7 +85,14 @@ class Supervisor(object):
             })).json()
 
     def configure(self, task_file, results_format_file, robot_file,
-                  environment_files):
+                  environment_files, addons_path):
+        if addons_path:
+            sys.path.insert(0, addons_path)
+            self.addons = importlib.import_module('benchbot_addons.manager')
+            del sys.path[0]
+            print("LOADED MANAGER:")
+            print(self.addons)
+
         self.task_file = task_file
         self.results_format_file = results_format_file
         self.robot_file = robot_file
