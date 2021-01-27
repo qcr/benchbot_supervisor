@@ -8,16 +8,14 @@ if __name__ == '__main__':
     p.add_argument('--port',
                    help="Supervisor port number (default: 10000)",
                    default=DEFAULT_PORT)
-    p.add_argument('--task-file', help="File containing a task specification")
+    p.add_argument('--task-name', help="Name of task to run")
+    p.add_argument('--results-format-name',
+                   help="Name of the expected format for task results")
+    p.add_argument('--robot-name', help="Name of the robot to run")
     p.add_argument(
-        '--results-format-file',
-        help="File containing specification for the task's results format")
-    p.add_argument('--robot-file', help="File containing a robot definition")
-    p.add_argument(
-        '--environment-files',
-        help=
-        "List files (colon separated), each file containing the definition for "
-        "a selected environment")
+        '--environment-names',
+        help="List of environment scenes to run wit this task (comma-separated)"
+    )
     p.add_argument(
         '--addons-path',
         help="Path where the benchbot_addons Python package can be found")
@@ -25,9 +23,9 @@ if __name__ == '__main__':
 
     # Start the supervisor
     s = Supervisor(port=args.port,
-                   task_file=args.task_file,
-                   results_format_file=args.results_format_file,
-                   robot_file=args.robot_file,
-                   environment_files=args.environment_files,
+                   task_name=args.task_name,
+                   results_format_name=args.results_format_name,
+                   robot_name=args.robot_name,
+                   environment_names=args.environment_names.split(','),
                    addons_path=args.addons_path)
     s.run()
