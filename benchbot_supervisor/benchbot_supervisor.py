@@ -29,38 +29,44 @@ class Supervisor(object):
     _BLANK_CONFIG = {'environments': [], 'robot': {}, 'task': {}}
 
     def __init__(self,
+                 addons_path,
                  port=DEFAULT_PORT,
-                 task_file=None,
                  task_name=None,
-                 results_format_file=None,
-                 robot_file=None,
-                 actions_file=None,
-                 observations_file=None,
-                 environment_files=None,
-                 addons_path=None):
-        print("Initialising supervisor...")
-
-        # Configuration parameters (these are mostly set by the 'configure()'
-        # function, but we need to declare them as class members here)
+                 results_format_name=None,
+                 robot_name=None,
+                 environment_names=None):
+        # Configuration parameters
         self.supervisor_address = 'http://0.0.0.0:' + str(port)
-        self.task_file = None
-        self.results_format_file = None
-        self.robot_file = None
-        self.environment_files = None
-        self.addons = None
+        self.task_name = task_name
+        self.results_format_name = results_format_name
+        self.robot_name = robot_name
+        self.environment_names = ([] if environment_names is None else
+                                  environment_names)
+        self.addons_path = addons_path
 
         # Derived configuration variables
         self.config = None
-        self.environment_data = None
 
         # Current state
         self.state = {}
         self.results_functions = {}
 
+        # Attempt to attach to a manager from benchbot_addons (supervisor can't
+        # interact with any content without this connect)
+        print("Initialising supervisor...")
+        sys.path.insert(0, addons_path)
+        self.addons = importlib.import_module('benchbot_addons.manager')
+        del sys.path[0]
+        print("LOADED MANAGER:")
+        print(self.addons)
+
         # Configure the Supervisor with provided arguments
         print("Configuring the supervisor...")
-        self.configure(task_file, results_format_file, robot_file,
-                       environment_files, addons_path)
+        self.load()
+
+        # At this point we have a running supervisor ready for use
+        print("Starting a supervisor with the following configuration:\n")
+        pprint.pprint(self.config, depth=3)
 
     def _load_config_from_file(self, key, files, force_list=False):
         if not isinstance(files, list):
@@ -83,26 +89,6 @@ class Supervisor(object):
             command, **({} if data is None else {
                 'json': data
             })).json()
-
-    def configure(self, task_file, results_format_file, robot_file,
-                  environment_files, addons_path):
-        if addons_path:
-            sys.path.insert(0, addons_path)
-            self.addons = importlib.import_module('benchbot_addons.manager')
-            del sys.path[0]
-            print("LOADED MANAGER:")
-            print(self.addons)
-
-        self.task_file = task_file
-        self.results_format_file = results_format_file
-        self.robot_file = robot_file
-        self.environment_files = (None if environment_files is None else
-                                  environment_files.split(':'))
-
-        self.load()
-
-        print("Starting a supervisor with the following configuration:\n")
-        pprint.pprint(self.config, depth=3)
 
     def load(self):
         # Load all of the configuration data provided in the selected YAML files
