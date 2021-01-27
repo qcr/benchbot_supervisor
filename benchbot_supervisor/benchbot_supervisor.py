@@ -66,21 +66,6 @@ class Supervisor(object):
         print("Starting a supervisor with the following configuration:\n")
         pprint.pprint(self.config, depth=3)
 
-    def _load_config_from_file(self, key, files, force_list=False):
-        if not isinstance(files, list):
-            files = [files]
-        use_list = force_list or len(files) > 1
-
-        data = []
-        for f in files:
-            with open(f, 'r') as fp:
-                data.append(yaml.safe_load(fp))
-            data[-1][FILE_PATH_KEY] = f
-
-        if self.config is None:
-            self.config = self._BLANK_CONFIG.copy()
-        self.config[key] = data if use_list else data[0]
-
     def _robot(self, command, data=None):
         return (requests.get if data is None else requests.post)(
             re.sub('//$', '/', '%s/' % self.config['robot']['address']) +
@@ -108,15 +93,8 @@ class Supervisor(object):
         ]
 
         # Load the helper functions for results creation
-        if 'functions' in self.config['results']:
-            sys.path.insert(
-                0, os.path.dirname(self.config['results'][FILE_PATH_KEY]))
-            self.results_functions = {
-                k: getattr(importlib.import_module(re.sub('\.[^\.]*$', "", v)),
-                           re.sub('^.*\.', "", v))
-                for k, v in self.config['results']['functions'].items()
-            }
-            del sys.path[0]
+        self.results_functions = self.addons.load_functions(
+            self.config['results'])
 
         # Perform any required manual cleaning / sanitising of data
         if 'scene_count' not in self.config['task']:
