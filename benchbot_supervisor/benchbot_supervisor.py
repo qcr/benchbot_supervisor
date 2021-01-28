@@ -143,8 +143,7 @@ class Supervisor(object):
                     flask.abort(404)
             return flask.jsonify(c)
 
-        @supervisor_flask.route('/connections/<connection>',
-                                methods=['GET', 'POST'])
+        @supervisor_flask.route('/connections/<connection>', methods=['GET'])
         def __connection_get(connection):
             # TODO there needs to be better error checking for when no message
             # has been received on a ROS topic!!! (at the moment all we get is
@@ -153,10 +152,8 @@ class Supervisor(object):
                 print("ERROR: Requested undefined connection: %s" % connection)
                 flask.abort(404)
             try:
-                return self._robot(
-                    '/connections/%s' % connection,
-                    data=(flask.request.get_json()
-                          if flask.request.method == 'POST' else None))
+                return self._robot('/connections/%s' % connection,
+                                   data=flask.request.get_json())
             except Exception as e:
                 print("ERROR: Supervisor failed on processing connection "
                       "'%s' with error:\n%s" % (connection, repr(e)))
