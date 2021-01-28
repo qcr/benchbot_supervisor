@@ -29,51 +29,42 @@ class Supervisor(object):
     _BLANK_CONFIG = {'environments': [], 'robot': {}, 'task': {}}
 
     def __init__(self,
+                 addons_path,
                  port=DEFAULT_PORT,
-                 task_file=None,
                  task_name=None,
-                 results_format_file=None,
-                 robot_file=None,
-                 actions_file=None,
-                 observations_file=None,
-                 environment_files=None):
-        print("Initialising supervisor...")
-
-        # Configuration parameters (these are mostly set by the 'configure()'
-        # function, but we need to declare them as class members here)
+                 results_format_name=None,
+                 robot_name=None,
+                 environment_names=None):
+        # Configuration parameters
         self.supervisor_address = 'http://0.0.0.0:' + str(port)
-        self.task_file = None
-        self.results_format_file = None
-        self.robot_file = None
-        self.environment_files = None
+        self.task_name = task_name
+        self.results_format_name = results_format_name
+        self.robot_name = robot_name
+        self.environment_names = ([] if environment_names is None else
+                                  environment_names)
+        self.addons_path = addons_path
 
         # Derived configuration variables
         self.config = None
-        self.environment_data = None
 
         # Current state
         self.state = {}
         self.results_functions = {}
 
+        # Attempt to attach to a manager from benchbot_addons (supervisor can't
+        # interact with any content without this connect)
+        print("Initialising supervisor...")
+        sys.path.insert(0, addons_path)
+        self.addons = importlib.import_module('benchbot_addons.manager')
+        del sys.path[0]
+
         # Configure the Supervisor with provided arguments
-        print("Configuring the supervisor...")
-        self.configure(task_file, results_format_file, robot_file,
-                       environment_files)
+        print("\nConfiguring the supervisor...")
+        self.load()
 
-    def _load_config_from_file(self, key, files, force_list=False):
-        if not isinstance(files, list):
-            files = [files]
-        use_list = force_list or len(files) > 1
-
-        data = []
-        for f in files:
-            with open(f, 'r') as fp:
-                data.append(yaml.safe_load(fp))
-            data[-1][FILE_PATH_KEY] = f
-
-        if self.config is None:
-            self.config = self._BLANK_CONFIG.copy()
-        self.config[key] = data if use_list else data[0]
+        # At this point we have a running supervisor ready for use
+        print("Starting a supervisor with the following configuration:\n")
+        pprint.pprint(self.config, depth=3)
 
     def _robot(self, command, data=None):
         return (requests.get if data is None else requests.post)(
@@ -82,38 +73,28 @@ class Supervisor(object):
                 'json': data
             })).json()
 
-    def configure(self, task_file, results_format_file, robot_file,
-                  environment_files):
-        self.task_file = task_file
-        self.results_format_file = results_format_file
-        self.robot_file = robot_file
-        self.environment_files = (None if environment_files is None else
-                                  environment_files.split(':'))
-
-        self.load()
-
-        print("Starting a supervisor with the following configuration:\n")
-        pprint.pprint(self.config, depth=3)
-
     def load(self):
         # Load all of the configuration data provided in the selected YAML files
-        self._load_config_from_file('task', self.task_file)
-        self._load_config_from_file('results', self.results_format_file)
-        self._load_config_from_file('robot', self.robot_file)
-        self._load_config_from_file('environments',
-                                    self.environment_files,
-                                    force_list=True)
+        if self.config is None:
+            self.config = self._BLANK_CONFIG.copy()
+        self.config['task'] = self.addons.get_match("tasks",
+                                                    [("name", self.task_name)],
+                                                    return_data=True)
+        self.config['results'] = self.addons.get_match(
+            "formats", [("name", self.results_format_name)], return_data=True)
+        self.config['robot'] = self.addons.get_match(
+            "robots", [("name", self.robot_name)], return_data=True)
+        self.config['environments'] = [
+            self.addons.get_match("environments",
+                                  [("name", self.addons.env_name(e)),
+                                   ("variant", self.addons.env_variant(e))],
+                                  return_data=True)
+            for e in self.environment_names
+        ]
 
         # Load the helper functions for results creation
-        if 'functions' in self.config['results']:
-            sys.path.insert(
-                0, os.path.dirname(self.config['results'][FILE_PATH_KEY]))
-            self.results_functions = {
-                k: getattr(importlib.import_module(re.sub('\.[^\.]*$', "", v)),
-                           re.sub('^.*\.', "", v))
-                for k, v in self.config['results']['functions'].items()
-            }
-            del sys.path[0]
+        self.results_functions = self.addons.load_functions(
+            self.config['results'])
 
         # Perform any required manual cleaning / sanitising of data
         if 'scene_count' not in self.config['task']:
