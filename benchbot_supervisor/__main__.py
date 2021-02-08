@@ -9,8 +9,6 @@ if __name__ == '__main__':
                    help="Supervisor port number (default: 10000)",
                    default=DEFAULT_PORT)
     p.add_argument('--task-name', help="Name of task to run")
-    p.add_argument('--results-format-name',
-                   help="Name of the expected format for task results")
     p.add_argument('--robot-name', help="Name of the robot to run")
     p.add_argument(
         '--environment-names',
@@ -24,7 +22,6 @@ if __name__ == '__main__':
     # Start the supervisor
     s = Supervisor(port=args.port,
                    task_name=args.task_name,
-                   results_format_name=args.results_format_name,
                    robot_name=args.robot_name,
                    environment_names=args.environment_names.split(','),
                    addons_path=args.addons_path)

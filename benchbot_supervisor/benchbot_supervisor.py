@@ -32,13 +32,11 @@ class Supervisor(object):
                  addons_path,
                  port=DEFAULT_PORT,
                  task_name=None,
-                 results_format_name=None,
                  robot_name=None,
                  environment_names=None):
         # Configuration parameters
         self.supervisor_address = 'http://0.0.0.0:' + str(port)
         self.task_name = task_name
-        self.results_format_name = results_format_name
         self.robot_name = robot_name
         self.environment_names = ([] if environment_names is None else
                                   environment_names)
@@ -81,7 +79,8 @@ class Supervisor(object):
                                                     [("name", self.task_name)],
                                                     return_data=True)
         self.config['results'] = self.addons.get_match(
-            "formats", [("name", self.results_format_name)], return_data=True)
+            "formats", [("name", self.config['task']['results_format'])],
+            return_data=True)
         self.config['robot'] = self.addons.get_match(
             "robots", [("name", self.robot_name)], return_data=True)
         self.config['environments'] = [
