@@ -8,11 +8,10 @@ The BenchBot Supervisor is a HTTP server facilitating communication between user
 
 ## Installing and running the BenchBot Supervisor
 
-BenchBot Supervisor is a Python package containing a `Supervisor` class that wraps a HTTP server for both upstream and downstream communication. The package is installed like any other Python package:
+BenchBot Supervisor is a Python package containing a `Supervisor` class that wraps a HTTP server for both upstream and downstream communication. Install by running the following in the root directory of where this repository was cloned:
 
 ```
-u@pc:~$ git clone https://github.com/roboticvisionorg/benchbot_supervisor
-u@pc:~$ cd benchbot_supervisor && pip install .
+u@pc:~$ pip install .
 ```
 
 Once installed, the Python class can be used as follows:
