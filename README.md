@@ -50,7 +50,7 @@ u@pc:~$ python -m benchbot_supervisor \
 
 The BenchBot Supervisor requires configuration details for the selected tasks, robots, and environments. It uses these details to manage each of the system components, like API interaction and control of the simulator / real robot. Configuration details are provided by YAML files, which are referenced via their `'name'` field as shown above.
 
-The [BenchBot Add-on Manager](https://github.com/roboticvisionorg/benchbot_addons) manages the installation of, and access to, these files. See the documentation there for further details on configuration files. All you need to do to use add-ons with the supervisor is provide the location via the `'addons_path'` argument.
+The [BenchBot Add-ons Manager](https://github.com/roboticvisionorg/benchbot_addons) manages the installation of, and access to, these files. See the documentation there for further details on configuration files. All you need to do to use add-ons with the supervisor is provide the location via the `'addons_path'` argument.
 
 ## Interacting with the BenchBot Supervisor
 
