@@ -5,14 +5,13 @@ with open("README.md", "r") as fh:
 
 setup(
     name='benchbot_supervisor',
-    version='1.1.0',
+    version='2.0.0',
     author='Ben Talbot',
     author_email='b.talbot@qut.edu.au',
     description='The BenchBot Supervisor, used in the BenchBot Software Stack',
     long_description=long_description,
     long_description_content_type='text/markdown',
     packages=find_packages(),
-    package_data={'benchbot_supervisor': ['*/*.yaml']},
     install_requires=['flask', 'gevent', 'pyyaml', 'requests'],
     classifiers=(
         "Programming Language :: Python :: 2",
