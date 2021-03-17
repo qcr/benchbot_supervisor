@@ -78,9 +78,11 @@ class Supervisor(object):
         self.config['task'] = self.addons.get_match("tasks",
                                                     [("name", self.task_name)],
                                                     return_data=True)
-        self.config['results'] = self.addons.get_match(
-            "formats", [("name", self.config['task']['results_format'])],
-            return_data=True)
+        self.config['results'] = (
+            {} if 'results_format' not in self.config['task'] else
+            self.addons.get_match(
+                "formats", [("name", self.config['task']['results_format'])],
+                return_data=True))
         self.config['robot'] = self.addons.get_match(
             "robots", [("name", self.robot_name)], return_data=True)
         self.config['environments'] = [
