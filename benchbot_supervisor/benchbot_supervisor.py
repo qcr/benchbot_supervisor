@@ -98,8 +98,12 @@ class Supervisor(object):
             self.config['results'])
 
         # Perform any required manual cleaning / sanitising of data
+        # TODO all default config handling logic from benchbot_robot_controller
+        # needs to be moved into here
         if 'scene_count' not in self.config['task']:
             self.config['task']['scene_count'] = 1
+        if 'localisation' not in self.config['task']:
+            self.config['task']['localisation'] = 1
         if 'start_cmds' in self.config['robot']:
             self.config['robot']['start_cmds'] = [
                 c.strip() for c in self.config['robot']['start_cmds']
