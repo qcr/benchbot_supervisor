@@ -2,6 +2,11 @@
 
 # BenchBot Supervisor
 
+[![BenchBot project](https://img.shields.io/badge/collection-BenchBot-%231a2857)](http://benchbot.org)
+[![QUT Centre for Robotics Open Source](https://github.com/qcr/qcr.github.io/raw/master/misc/badge.svg)](https://qcr.github.io)
+![Primary language](https://img.shields.io/github/languages/top/qcr/benchbot_supervisor)
+[![License](https://img.shields.io/github/license/qcr/benchbot_supervisor)](./LICENSE.txt)
+
 <p align="center"><img alt="benchbot_supervisor" src="./docs/benchbot_supervisor.jpg" width="60%"/></p>
 
 The BenchBot Supervisor is a HTTP server facilitating communication between user-facing interfaces like the [BenchBot API](https://github.com/qcr/benchbot_api), and the low-level robot components like [BenchBot Simulator](https://github.com/qcr/benchbot_simulator) or real robots. Communication is typically routed through a [BenchBot Robot Controller](https://github.com/qcr/benchbot_robot_controller), which provides automated process management for low-level components and wraps all ROS communications.
@@ -65,4 +70,4 @@ The supervisor includes a RESTful HTTP API for all interaction with a user-facin
 | `/results_functions/`           | `list`                                                           | Returns a list of the results function names that can be remotely executed via the route below.                                                                                                                                             |
 | `/results_functions/<function>` | `dict`                                                           | Calls results function with name `'function'`, and returns the result of the function call in the response's JSON body.                                                                                                                     |
 | `/robot/`                       | <pre>Hello, I am the BenchBot robot controller</pre>             | Arbitrary response confirming a robot controller is available.                                                                                                                                                                              |
-| `/robot/<command>`              | `dict`                                                           | Passes the command `command` down to a running robot controller manager. See [BenchBot Robot Controller](https://github.com/qcr/benchbot_robot_controller) for documentation of supported commands & expected responses.       |
+| `/robot/<command>`              | `dict`                                                           | Passes the command `command` down to a running robot controller manager. See [BenchBot Robot Controller](https://github.com/qcr/benchbot_robot_controller) for documentation of supported commands & expected responses.                    |
