@@ -118,8 +118,8 @@ class Supervisor(object):
         # requested by the task
         for x in (self.config['task']['actions'] +
                   self.config['task']['observations']):
-            if (self.config['robot']['connections'] is None
-                    or x not in self.config['robot']['connections']):
+            if (self.config['robot']['connections'] is None or
+                    x not in self.config['robot']['connections']):
                 raise ValueError(
                     "The task '%s' requires an action / observation called '%s',"
                     " which isn't declared for the robot in file '%s'" %
@@ -210,9 +210,8 @@ class Supervisor(object):
             re.split('http[s]?://', self.supervisor_address)[-1],
             supervisor_flask)
         evt = event.Event()
-        signal.signal(signal.SIGINT, evt.set)
-        signal.signal(signal.SIGQUIT, evt.set)
-        signal.signal(signal.SIGTERM, evt.set)
+        for s in [signal.SIGINT, signal.SIGQUIT, signal.SIGTERM]:
+            signal.signal(s, lambda n, frame: evt.set())
 
         # Start the server & wait until the robot controller is contactable
         supervisor_server.start()
