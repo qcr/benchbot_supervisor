@@ -230,9 +230,13 @@ class Supervisor(object):
             time.sleep(1)
         print("\tFound")
 
-        # TODO we need to ensure map file is loaded if sending to a remote!
         print("Sending environment data & robot config to controller ... ")
         self._robot('/configure', self.config)
+        print("\tReady\n")
+
+        print("Starting the robot controller ... ")
+        self._robot('/prepare')
+        self._robot('/start')
         print("\tReady\n")
 
         # Run the server in a blocking manner until the Supervisor is closed
