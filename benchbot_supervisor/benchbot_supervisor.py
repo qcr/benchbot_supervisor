@@ -232,7 +232,7 @@ class Supervisor(object):
 
         print("Sending environment data & robot config to controller ... ")
         self._robot('/configure', self.config)
-        print("\tReady\n")
+        print("\tReady")
 
         print("Starting the robot controller ... ")
         self._robot('/prepare')
