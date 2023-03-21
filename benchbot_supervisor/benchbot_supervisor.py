@@ -65,8 +65,6 @@ class Supervisor(object):
         pprint.pprint(self.config, depth=3)
 
     def _robot(self, command, data=None):
-        print("ROBOT ADDRESS IN SUPERVISOR")
-        print(self.config['robot']['address'])
         return (requests.get if data is None else requests.post)(
             re.sub('//$', '/', '%s/' % self.config['robot']['address']) +
             command, **({} if data is None else {
